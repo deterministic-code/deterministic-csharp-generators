@@ -1,0 +1,20 @@
+{
+  "name": "@deterministic-code/csharp-generators",
+  "version": "0.0.1",
+  "description": "C# generator pack for the deterministic toolchain: the emit-*-csharp lane modules and the Deterministic .NET runtime library.",
+  "type": "module",
+  "exports": {
+    "./*": { "types": "./dist/*.d.ts", "import": "./dist/*.js" },
+    "./package.json": "./package.json"
+  },
+  "files": ["dist", "src", "csharp"],
+  "scripts": {
+    "build": "rm -rf dist && tsc -p tsconfig.build.json && cp -R src/templates dist/",
+    "typecheck": "tsc -p tsconfig.build.json --noEmit"
+  },
+  "dependencies": {
+    "@deterministic-code/generator-sdk": "github:deterministic-code/generators-common",
+    "@deterministic-code/patch-merger": "github:deterministic-code/patch-merger"
+  },
+  "devDependencies": { "@types/node": "^22.10.0", "typescript": "^5.8.0" }
+}

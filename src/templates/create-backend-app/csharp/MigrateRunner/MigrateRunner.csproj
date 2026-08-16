@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>Deterministic.MigrateRunner</RootNamespace>
+    <AssemblyName>MigrateRunner</AssemblyName>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA1031;CA1303;CA1812;CA1848;CA2007</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="DotNetEnv" Version="3.2.0" />
+    <!-- === BEGIN DIALECT_PACKAGES — see PATCH_PLAN in create-migrate-scripts.mjs === -->
+    <!-- === END DIALECT_PACKAGES === -->
+  </ItemGroup>
+
+</Project>
