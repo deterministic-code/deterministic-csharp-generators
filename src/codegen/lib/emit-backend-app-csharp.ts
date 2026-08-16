@@ -127,7 +127,7 @@ export async function renderCSharpAppsettings(env?: string): Promise<string> {
 }
 
 export async function renderCSharpGitignoreSection(): Promise<string> {
-  const templatePath = resolve(templatesDir, ".gitignore");
+  const templatePath = resolve(templatesDir, "gitignore.tmpl");
   return await readFile(templatePath, "utf8");
 }
 

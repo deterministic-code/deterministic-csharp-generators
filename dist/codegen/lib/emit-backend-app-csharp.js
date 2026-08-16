@@ -82,7 +82,7 @@ export async function renderCSharpAppsettings(env) {
     return await renderTemplate(templatePath, {});
 }
 export async function renderCSharpGitignoreSection() {
-    const templatePath = resolve(templatesDir, ".gitignore");
+    const templatePath = resolve(templatesDir, "gitignore.tmpl");
     return await readFile(templatePath, "utf8");
 }
 export function renderCSharpEnvSection() {
