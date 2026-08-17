@@ -1,5 +1,5 @@
-import { needsListImport } from "@deterministic-code/generator-sdk/codegen/lib/emit-view-shared";
-/** The C# lane's import renderer, injected into an emitter as `ctx.imports`. C# references other types by namespace-qualified name and brings namespaces into scope with `using` directives. */
+import { needsListImport } from "@deterministic-code/generator-sdk/codegen/lib/generate-view-shared";
+/** The C# lane's import renderer, injected into an generator as `ctx.imports`. C# references other types by namespace-qualified name and brings namespaces into scope with `using` directives. */
 export class CsharpImports {
     ctx;
     constructor(ctx) {
