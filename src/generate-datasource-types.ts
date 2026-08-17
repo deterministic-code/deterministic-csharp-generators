@@ -1,131 +1,79 @@
-import { DEFAULT_COMMENT_STYLE } from "@deterministic-code/generator-sdk/generate-doc-comment";
-import { datasourceTypesGenerator } from "@deterministic-code/generator-sdk/codegen-context";
-import { datasourceTypesModule } from "@deterministic-code/generator-sdk/codegen/lib/generate-settings-options";
-import { normalizeDatasourceTable } from "@deterministic-code/generator-sdk/codegen/lib/datasource-normalize";
-import { CsharpImports } from "./csharp-imports.ts";
-import { createTypeMapper } from "@deterministic-code/generator-sdk/codegen/lib/type-mapper";
-import { datasourceSettingsFor } from "@deterministic-code/generator-sdk/codegen/lib/ts-datasource-settings";
-import { datasourceTypeDoc } from "@deterministic-code/generator-sdk/codegen/lib/datasource-types-generate-types";
-import type {
-  DatasourceField,
-  GenerateCtx,
-  GeneratedFile,
-  NormalizedTable,
-} from "@deterministic-code/generator-sdk/codegen/lib/datasource-types-generate-types";
+import { datasourceSettings } from "./common/datasource-settings.ts";
+import type { IDeterministicReader } from "./common/deterministic-reader.ts";
+import { commentStyle, renderDocComment } from "./common/doc-comment.ts";
+import type { GenerateContext } from "./common/generate-context.ts";
+import { content, type GenerateEntry } from "./common/generate-entry.ts";
+import { csharpNaming } from "./common/naming.ts";
+import { settingsStr } from "./common/settings.ts";
+import { convertSpecType } from "./common/type-converter.ts";
 
-interface CsGenerateOptions {
-  baseClass: string;
-  schemaVersion: string;
-  namespace: string;
-  baseNamespace: string;
-  style: unknown;
-  idType?: string;
-  datetime?: string;
-  withUuidColumn?: boolean;
-}
+export type { GenerateEntry };
 
-type CsCtx = GenerateCtx<CsGenerateOptions, CsharpImports>;
+export const generate = async (
+  ctx: GenerateContext,
+): Promise<GenerateEntry[]> => {
+  const ds = datasourceSettings(ctx.settings);
+  const naming = csharpNaming(ctx.settings);
+  const schemaVersion =
+    settingsStr(ctx.settings, "codegen.schema_version") ?? "1.0";
+  const style = commentStyle(settingsStr(ctx.settings, "comments"));
+  const tables = await ctx.reader.loadDatasourceTypes(ds.idType);
+  return tables.map((table) => {
+    const className = naming.className(table.name);
+    const base = ds.withUuidColumn
+      ? "StandardDataSourceWithUuid"
+      : "StandardDataSource";
+    const dt = convertSpecType("datetime", ds.datetimeRepr);
+    const typeArgs = ds.withUuidColumn
+      ? [ds.csharpIdType, "string", dt]
+      : [ds.csharpIdType, dt];
+    const fields = [
+      { name: "id", type: ds.idType, isNullable: false },
+      { name: "uuid", type: "uuid", isNullable: false },
+      { name: "created", type: "datetime", isNullable: false },
+      { name: "updated", type: "datetime", isNullable: false },
+      ...table.fields,
+    ].filter((f) => ds.withUuidColumn || f.name !== "uuid");
+    const body = fields
+      .map((f) => {
+        const t =
+          f.name === "id"
+            ? ds.csharpIdType
+            : convertSpecType(f.type, ds.datetimeRepr);
+        return `    public ${t}${f.isNullable ? "?" : ""} ${naming.fieldName(f.name)} { get; set; }`;
+      })
+      .join("\n");
+    const doc = renderDocComment({
+      style,
+      summary: `Type ${className}.`,
+      lines: [
+        `Datasource type: ${table.datasourceType}.`,
+        `Target: StandardCrud.`,
+        `Fields: ${fields.length}.`,
+      ],
+      language: "csharp",
+    });
+    return content(
+      naming.filePath(table.name),
+      `// schema-version: ${schemaVersion}
+using Deterministic.Types;
 
-export const DEFAULT_GENERATE_OPTIONS: CsGenerateOptions = {
-  baseClass: "StandardDataSource",
-  schemaVersion: "1.0",
-  namespace: "Backend.Types.Datasource",
-  baseNamespace: "Deterministic.Types",
-  style: DEFAULT_COMMENT_STYLE,
-};
+namespace Backend.Types.Datasource;
 
-const mapAbstractType = createTypeMapper("csharp");
-
-function normalizeTable(entry: unknown): NormalizedTable {
-  return normalizeDatasourceTable(entry, (fdef) => ({
-    size: fdef.size,
-    isUnique: fdef.is_unique === true,
-  }));
-}
-
-function mapType(field: DatasourceField, datetime = "native"): string {
-  return mapAbstractType(field.type, { datetime });
-}
-
-function generateField(field: DatasourceField, ctx: CsCtx): string {
-  const csType = mapType(field, ctx.opts.datetime);
-  const nullable = field.isNullable ? "?" : "";
-  return `    public ${csType}${nullable} ${ctx.fields.name(field.name)} { get; set; }`;
-}
-
-function buildBaseSpec(opts: CsGenerateOptions): {
-  baseName: string;
-  typeArgs: string[];
-} {
-  const ds = datasourceSettingsFor(opts);
-  const withUuid = ds.withUuidColumn && opts.withUuidColumn;
-  const baseName = withUuid ? `${opts.baseClass}WithUuid` : `${opts.baseClass}`;
-  const typeArgs = [ds.csharpIdType()];
-  if (withUuid) typeArgs.push("string");
-  typeArgs.push(opts.datetime === "string" ? "string" : "System.DateTime");
-  return { baseName, typeArgs };
-}
-
-function standardFieldsFor(idType: string): DatasourceField[] {
-  return [
-    { name: "id", type: idType, isNullable: false, isStandard: true },
-    { name: "uuid", type: "uuid", isNullable: false, isStandard: true },
-    { name: "created", type: "datetime", isNullable: false, isStandard: true },
-    { name: "updated", type: "datetime", isNullable: false, isStandard: true },
-  ];
-}
-
-function bodyLineFor(field: DatasourceField, ctx: CsCtx): string {
-  if (field.isStandard && field.name === "id") {
-    const csType = datasourceSettingsFor(ctx.opts).csharpIdType();
-    return `    public ${csType} ${ctx.fields.name(field.name)} { get; set; }`;
-  }
-  return generateField(field, ctx);
-}
-
-function renderTable(table: NormalizedTable, ctx: CsCtx): GeneratedFile {
-  const { names, opts, imports } = ctx;
-  const className = names.className(table.name);
-  const path = `${names.fileBase(table.name, "datasource-type")}${names.ext}`;
-  const withUuidColumn =
-    datasourceSettingsFor(opts).withUuidColumn && opts.withUuidColumn;
-  const { baseName, typeArgs } = buildBaseSpec(opts);
-
-  const allFields = [
-    ...standardFieldsFor(opts.idType!),
-    ...table.fields,
-  ].filter((f) => withUuidColumn || f.name !== "uuid");
-  const body = allFields.map((f) => bodyLineFor(f, ctx)).join("\n");
-
-  const doc = datasourceTypeDoc({
-    className,
-    datasourceType: table.datasourceType,
-    fieldCount: allFields.length,
-    style: opts.style,
-    language: "csharp",
-  });
-
-  const typeArgsStr = `<${typeArgs.join(", ")}>`;
-  const content = `// schema-version: ${opts.schemaVersion}
-${imports.using(opts.baseNamespace)}
-
-namespace ${opts.namespace};
-
-${doc}public class ${className} : ${baseName}${typeArgsStr}
+${doc}public class ${className} : ${base}<${typeArgs.join(", ")}>
 {
 ${body}
 }
-`;
-  return { path, content };
-}
+`,
+    );
+  });
+};
 
-const baseGenerate = datasourceTypesGenerator(
-  normalizeTable,
-  renderTable,
-)(CsharpImports);
-
-export const { render, createGenerator, generate } = datasourceTypesModule({
-  baseGenerate,
-  defaultGenerateOptions: DEFAULT_GENERATE_OPTIONS,
-  language: "csharp",
-});
+export const generateDatasourceTypes = async (args: {
+  reader: IDeterministicReader;
+  settings: GenerateContext["settings"];
+}): Promise<GenerateEntry[]> =>
+  generate({
+    reader: args.reader,
+    settings: args.settings,
+  });

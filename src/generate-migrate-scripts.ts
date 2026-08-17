@@ -16,7 +16,7 @@ import {
   csharpMigrateDownDispatchArmsContent,
   csharpMigrateDownRollbackMethodsContent,
   csharpProviderConnectionStringMethodsContent,
-} from "./generate-backend-app.ts";
+} from "./backend-app/dialects.ts";
 import {
   csharpMigrateCopyContent,
   csharpMigrateRuntimeCopyContent,
