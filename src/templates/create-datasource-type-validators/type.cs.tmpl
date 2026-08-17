@@ -1,0 +1,14 @@
+// schema-version: {{schemaVersion}}
+using FluentValidation;
+
+namespace {{namespace}};
+
+public class {{validatorClass}} : AbstractValidator<{{typesNamespace}}.{{className}}>
+{
+    public {{validatorClass}}()
+    {
+{{#rules}}
+{{&line}}
+{{/rules}}
+    }
+}

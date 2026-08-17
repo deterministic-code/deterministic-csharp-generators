@@ -1,0 +1,44 @@
+// schema-version: {{schemaVersion}}
+using Xunit;
+using Backend.Types.Datasource;
+
+namespace Backend.Tests.Datasource;
+
+public class {{className}}Tests
+{
+    private static {{className}} Sample() => new {{className}}
+    {
+{{#fields}}
+        {{ident}} = {{&sampleExpr}},
+{{/fields}}
+    };
+
+{{#fields}}
+    [Fact]
+    public void Gets{{ident}}()
+    {
+        var initial = {{&sampleExpr}};
+        var value = Sample();
+        value.{{ident}} = initial;
+        Assert.Equal(initial, value.{{ident}});
+    }
+
+    [Fact]
+    public void Sets{{ident}}()
+    {
+        var value = Sample();
+        var next = {{&nextExpr}};
+        value.{{ident}} = next;
+        Assert.Equal(next, value.{{ident}});
+    }
+{{#nullable}}
+    [Fact]
+    public void AllowsSetting{{ident}}ToNull()
+    {
+        var value = Sample();
+        value.{{ident}} = null;
+        Assert.Null(value.{{ident}});
+    }
+{{/nullable}}
+{{/fields}}
+}

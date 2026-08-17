@@ -12,7 +12,7 @@ import {
   buildDatasourceFixture,
   enumerateInvalidMutations,
 } from "@deterministic-code/generator-sdk/codegen/lib/fixture-builder";
-import { entryOf } from "@deterministic-code/generator-sdk/generator-shared";
+import { entryOf } from "./common/yaml-entry.ts";
 import { generateCsharpTestClass } from "./generate-csharp-tests-shared.ts";
 import { RuntimeValue } from "@deterministic-code/generator-sdk/codegen/lib/ts-sample-literal";
 import { INLINED_VIEW_AUDIT_FIELDS } from "@deterministic-code/generator-sdk/codegen/lib/standard-columns";

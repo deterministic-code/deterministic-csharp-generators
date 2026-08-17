@@ -11,7 +11,7 @@ import {
 import { normalizeAll } from "@deterministic-code/generator-sdk/view-expand";
 import { viewGenerator } from "@deterministic-code/generator-sdk/codegen-context";
 import { CsharpImports } from "./csharp-imports.ts";
-import { entryOf } from "@deterministic-code/generator-sdk/generator-shared";
+import { entryOf } from "./common/yaml-entry.ts";
 import { generateCsharpTestClass } from "./generate-csharp-tests-shared.ts";
 import { INLINED_VIEW_AUDIT_FIELDS as STANDARD_COLUMNS } from "@deterministic-code/generator-sdk/codegen/lib/standard-columns";
 import type { CodegenNames } from "@deterministic-code/generator-sdk/codegen-naming";
