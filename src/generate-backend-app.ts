@@ -1,4 +1,3 @@
-import type { IDeterministicReader } from "./common/deterministic-reader.ts";
 import { fill } from "./common/fill.ts";
 import type { GenerateContext } from "./common/generate-context.ts";
 import { content, patch, type GenerateEntry } from "./common/generate-entry.ts";
@@ -13,8 +12,6 @@ import {
   gitignore,
   programCs,
 } from "./backend-app/resources.ts";
-
-export type { GenerateEntry };
 
 const DEFAULT_APP_NAME = "generated-app";
 
@@ -53,14 +50,3 @@ export const generate = async (
     patch(".dockerignore", "bin/\nobj/", "DOCKERIGNORE_CSHARP"),
   ];
 };
-
-export const generateBackendApp = async (args: {
-  reader: IDeterministicReader;
-  settings: GenerateContext["settings"];
-}): Promise<GenerateEntry[]> =>
-  generate({
-    reader: args.reader,
-    settings: args.settings,
-  });
-
-export const pinProjectRoot = true;

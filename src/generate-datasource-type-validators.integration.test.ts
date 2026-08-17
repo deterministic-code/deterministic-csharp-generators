@@ -1,0 +1,122 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { memoryReader } from "./common/deterministic-reader.ts";
+import { DATASOURCE_TYPES_YAML } from "./common/parse-datasource-types.ts";
+import type { GenerateEntry } from "./common/generate-entry.ts";
+import { generate } from "./generate-datasource-type-validators.ts";
+
+const FIXTURE_YAML = `types:
+  - user:
+      datasource_type: audit
+      fields:
+        - email:
+            type: string
+            size: 256
+            min_size: 3
+        - role_id:
+            references: role.id
+        - nick_name:
+            type: string
+            is_nullable: true
+        - score:
+            type: float
+            min_size: 0
+  - role:
+      fields:
+        - name:
+            type: string
+`;
+
+const fixtureReader = () =>
+  memoryReader({ [DATASOURCE_TYPES_YAML]: FIXTURE_YAML });
+
+const entryBody = (entry: GenerateEntry): string => {
+  if ("contents" in entry) return String(entry.contents);
+  return entry.content;
+};
+
+const indexEntries = (entries: GenerateEntry[]): Map<string, GenerateEntry> => {
+  const map = new Map<string, GenerateEntry>();
+  for (const entry of entries) {
+    assert.equal(
+      map.has(entry.filename),
+      false,
+      `duplicate generate entry: ${entry.filename}`,
+    );
+    map.set(entry.filename, entry);
+  }
+  return map;
+};
+
+const requireEntry = (
+  map: Map<string, GenerateEntry>,
+  filename: string,
+): GenerateEntry => {
+  const entry = map.get(filename);
+  if (entry === undefined) {
+    throw new Error(`missing generate entry: ${filename}`);
+  }
+  return entry;
+};
+
+describe("generate datasource type validators", () => {
+  const generateWith = (settings: Record<string, string> = {}) =>
+    generate({
+      reader: fixtureReader(),
+      settings,
+    });
+
+  const userBody = async (settings: Record<string, string> = {}) => {
+    const map = indexEntries(await generateWith(settings));
+    const userFile = [...map.keys()].find((name) =>
+      name.endsWith("DatasourceUserValidator.cs"),
+    );
+    assert.ok(userFile, "missing DatasourceUserValidator.cs generate entry");
+    return entryBody(requireEntry(map, userFile));
+  };
+
+  it("rejects a missing datasource_types.yaml", async () => {
+    await assert.rejects(
+      () =>
+        generate({
+          reader: memoryReader({}),
+          settings: {},
+        }),
+      /missing datasource_types\.yaml/,
+    );
+  });
+
+  it("emits one validator class file per datasource type", async () => {
+    const byName = indexEntries(await generateWith({}));
+    assert.deepEqual(
+      [...byName.keys()].sort(),
+      ["DatasourceRoleValidator.cs", "DatasourceUserValidator.cs"],
+    );
+  });
+
+  it("emits a FluentValidation AbstractValidator with field rules", async () => {
+    const user = await userBody();
+    assert.match(user, /using FluentValidation;/);
+    assert.match(user, /namespace Backend\.Validators\.Datasource;/);
+    assert.match(
+      user,
+      /public class DatasourceUserValidator : AbstractValidator<Backend\.Types\.Datasource\.User>/,
+    );
+    assert.match(user, /RuleFor\(x => x\.Id\)\n\s+\.NotNull\(\)\n\s+\.GreaterThanOrEqualTo\(0\)/);
+    assert.match(user, /RuleFor\(x => x\.Email\)[\s\S]*\.MinimumLength\(3\)[\s\S]*\.MaximumLength\(256\)/);
+    assert.match(user, /RuleFor\(x => x\.RoleId\)[\s\S]*\.GreaterThanOrEqualTo\(0L\)/);
+    assert.match(user, /RuleFor\(x => x\.NickName\);/);
+    assert.match(user, /RuleFor\(x => x\.Score\)[\s\S]*\.GreaterThanOrEqualTo\(0\.0\)/);
+  });
+
+  it("drops the uuid rule and uses Guid ids when datasource.id_type=uuid", async () => {
+    const user = await userBody({ "datasource.id_type": "uuid" });
+    assert.match(user, /RuleFor\(x => x\.Id\)\n\s+\.NotNull\(\);/);
+    assert.doesNotMatch(user, /RuleFor\(x => x\.Uuid\)/);
+  });
+
+  it("writes codegen.schema_version into the file header", async () => {
+    const user = await userBody({ "codegen.schema_version": "9.9" });
+    assert.match(user, /schema-version: 9.9/);
+  });
+});
