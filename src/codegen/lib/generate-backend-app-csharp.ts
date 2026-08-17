@@ -32,7 +32,6 @@ import {
 } from "@deterministic-code/generator-sdk/codegen/lib/generate-result";
 import { loadBackendAppInputs } from "@deterministic-code/generator-sdk/codegen/lib/backend-app-inputs";
 import { makeBackendAppGenerate } from "@deterministic-code/generator-sdk/codegen/lib/backend-app-generate-helpers";
-import { COMBINED_FLAG } from "@deterministic-code/generator-sdk/codegen/lib/backend-lane";
 import {
   DOCKERIGNORE_TRIGGER,
   dockerignoreSection,
@@ -396,6 +395,4 @@ export async function generateBackendApp(args: GenerateArgs): Promise<GenerateEn
 }
 
 export const generate = makeBackendAppGenerate(generateBackendApp, "csharp");
-export const entriesNative = true;
 export const pinProjectRoot = true;
-export const flags = [COMBINED_FLAG];

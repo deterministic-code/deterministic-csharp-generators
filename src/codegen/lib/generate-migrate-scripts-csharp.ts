@@ -33,9 +33,7 @@ import {
   gitkeepEntries,
   makeRunnerTemplates,
   makeMigrateGenerate,
-  MIGRATE_DIR_FLAG,
 } from "@deterministic-code/generator-sdk/codegen/lib/migrate-generate-helpers";
-import { COMBINED_FLAG } from "@deterministic-code/generator-sdk/codegen/lib/backend-lane";
 import { withSqliteDialect } from "@deterministic-code/generator-sdk/codegen/lib/deterministic-project";
 import type {
   ContentEntry,
@@ -172,12 +170,12 @@ async function csharpEntries({
   ];
 }
 
+const MIGRATE_DIR = "MigrateRunner";
+
 export const migrateCsharp = {
   language: "csharp",
   generate: csharpEntries,
 };
 
-export const generate = makeMigrateGenerate(csharpEntries);
-export const flags = [MIGRATE_DIR_FLAG, COMBINED_FLAG];
-export const entriesNative = true;
+export const generate = makeMigrateGenerate(csharpEntries, MIGRATE_DIR);
 export const pinProjectRoot = true;
