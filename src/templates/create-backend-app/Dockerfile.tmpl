@@ -1,8 +1,8 @@
 FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 WORKDIR /src
-COPY {{MULTILANG_PREFIX}}{{PROJECT_NAME}}.csproj ./
+COPY {{PROJECT_NAME}}.csproj ./
 RUN dotnet restore {{PROJECT_NAME}}.csproj
-COPY {{COPY_ALL_SRC}} ./
+COPY . ./
 # === BEGIN MIGRATE_COPY — see PATCH_PLAN in create-migrate-scripts.mjs ===
 # === END MIGRATE_COPY ===
 RUN dotnet publish {{PROJECT_NAME}}.csproj -c Release -o /app/publish
@@ -13,7 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends curl && rm -rf 
 COPY --from=build /app/publish ./
 # === BEGIN MIGRATE_RUNTIME_COPY — see PATCH_PLAN in create-migrate-scripts.mjs ===
 # === END MIGRATE_RUNTIME_COPY ===
-COPY {{MULTILANG_PREFIX}}scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
+COPY scripts/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 4000
 ENV ASPNETCORE_URLS=http://+:4000
