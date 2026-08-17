@@ -10,7 +10,7 @@ import {
   makeChunkLoader,
   renderTemplate,
 } from "@deterministic-code/generator-sdk/codegen/lib/chunk-loader";
-import { PACK_TEMPLATES_DIR } from "../../pack-root.ts";
+import { PACK_TEMPLATES_DIR } from "./pack-root.ts";
 
 const { loadChunk, renderDialectMap } = makeChunkLoader(PACK_TEMPLATES_DIR);
 import { filterChunks } from "@deterministic-code/generator-sdk/dialect-filter";

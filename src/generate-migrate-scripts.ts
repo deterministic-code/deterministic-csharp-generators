@@ -1,4 +1,4 @@
-import { PACK_TEMPLATES_DIR } from "../../pack-root.ts";
+import { PACK_TEMPLATES_DIR } from "./pack-root.ts";
 import { join } from "node:path";
 import {
   buildAppModel,
@@ -16,7 +16,7 @@ import {
   csharpMigrateDownDispatchArmsContent,
   csharpMigrateDownRollbackMethodsContent,
   csharpProviderConnectionStringMethodsContent,
-} from "./generate-backend-app-csharp.ts";
+} from "./generate-backend-app.ts";
 import {
   csharpMigrateCopyContent,
   csharpMigrateRuntimeCopyContent,
