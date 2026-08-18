@@ -1,66 +1,28 @@
-import {
-  generateServiceTestsFiles,
-  dispatchServiceTestsStep,
-  servicesStepGenerate,
-  type GeneratedFile,
-  type ServiceTestsGenerateConfig,
-} from "@deterministic-code/generator-sdk/codegen/lib/services-generate";
-import {
-  toCase,
-  type CaseFormat,
-} from "@deterministic-code/generator-sdk/case";
-import { namesFor } from "@deterministic-code/generator-sdk/codegen/lib/ts-codegen-naming";
+import { fill } from "./common/fill.ts";
+import type { GenerateContext } from "./common/generate-context.ts";
+import { content, type GenerateEntry } from "./common/generate-entry.ts";
+import { datasourceSettings } from "./common/datasource-settings.ts";
+import { csharpServiceNaming } from "./common/naming.ts";
+import { loadServices } from "./common/parse-services.ts";
+import { genericTmpl } from "./resources/service-tests.ts";
 
-interface CsharpTestCandidate {
-  name: string;
-}
-
-interface CsharpTestGenerateOptions {
-  schemaVersion?: string;
-  servicePath?: string;
-  fileFormat?: CaseFormat;
-}
-
-export const DEFAULT_GENERATE_OPTIONS = {
-  schemaVersion: "1.0",
-  servicePath: ".",
-  fileFormat: "Camel",
-} as const;
-
-export function generateGenericServiceTest(
-  candidate: CsharpTestCandidate,
-  options: CsharpTestGenerateOptions = DEFAULT_GENERATE_OPTIONS,
-): GeneratedFile {
-  const { fileFormat = "Camel" } = options;
-  const names = namesFor({ fileFormat, language: "csharp" });
-  const testClass = names.className(candidate.name, "service_tests");
-  // lint-generator-casing-allow: toCase
-  const fileBase = toCase(`${candidate.name}_service_tests`, fileFormat);
-  const content = `namespace Backend.Services.Views.Tests;
-
-public class ${testClass} { }
-`;
-  return { path: `${fileBase}.cs`, content };
-}
-
-/** Catalog `service_tests` step (csharp). */
-export const generate = (ctx: unknown) =>
-  servicesStepGenerate(
-    {
-      dispatchStep: dispatchServiceTestsStep,
-      generator: { createGenerator },
-      language: "csharp",
-    },
-    ctx,
+export const generate = async (
+  ctx: GenerateContext,
+): Promise<GenerateEntry[]> => {
+  const naming = csharpServiceNaming(ctx.settings);
+  const { generics } = await loadServices(ctx.reader, {
+    idType: datasourceSettings(ctx.settings).idType,
+    serviceClassName: naming.serviceClassName,
+  });
+  return generics.map((c) =>
+    content(
+      `${naming.casedFileStem(`${c.name}_service_tests`)}.cs`,
+      fill(genericTmpl, {
+        testClass: naming.serviceClassName(c.name).replace(
+          /Service$/,
+          "ServiceTests",
+        ),
+      }),
+    ),
   );
-
-export const createGenerator = () => ({
-  generate: (config: ServiceTestsGenerateConfig) =>
-    generateServiceTestsFiles({
-      ...config,
-      primitives: {
-        generateGenericServiceTest,
-        defaultGenerateOptions: DEFAULT_GENERATE_OPTIONS,
-      },
-    }),
-});
+};

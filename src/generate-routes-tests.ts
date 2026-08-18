@@ -1,77 +1,20 @@
-import {
-  generateRoutesTestsFiles,
-  dispatchRoutesTestsStep,
-  routesStepGenerate,
-} from "@deterministic-code/generator-sdk/codegen/lib/routes-generate";
-import type { CaseFormat } from "@deterministic-code/generator-sdk/case";
-import type { CodegenNames } from "@deterministic-code/generator-sdk/codegen-naming";
-import {
-  namesFor,
-  type NamesForOptions,
-} from "@deterministic-code/generator-sdk/codegen/lib/ts-codegen-naming";
-import type {
-  GeneratedFile,
-  RoutesGenerateConfig,
-} from "@deterministic-code/generator-sdk/codegen/lib/routes-generate-types";
+import { fill } from "./common/fill.ts";
+import type { GenerateContext } from "./common/generate-context.ts";
+import { content, type GenerateEntry } from "./common/generate-entry.ts";
+import { datasourceSettings } from "./common/datasource-settings.ts";
+import { csharpRouteNaming } from "./common/naming.ts";
+import { loadRoutes } from "./common/parse-routes.ts";
+import { genericTmpl } from "./resources/routes-tests.ts";
 
-interface CsharpTestOptions extends NamesForOptions {
-  schemaVersion?: string;
-  apiBase?: string;
-  fileFormat?: CaseFormat;
-}
-
-interface TestCandidate {
-  name: string;
-}
-
-export const DEFAULT_GENERATE_OPTIONS: CsharpTestOptions = {
-  schemaVersion: "1.0",
-  apiBase: "/api",
-  fileFormat: "Camel",
+export const generate = async (
+  ctx: GenerateContext,
+): Promise<GenerateEntry[]> => {
+  const naming = csharpRouteNaming(ctx.settings);
+  const { candidates } = await loadRoutes(ctx.reader, {
+    idType: datasourceSettings(ctx.settings).idType,
+  });
+  return candidates.map((c) => {
+    const testClass = `${naming.routerClassName(c.name)}Tests`;
+    return content(`${testClass}.cs`, fill(genericTmpl, { testClass }));
+  });
 };
-
-const csharpNames = (options: CsharpTestOptions): CodegenNames =>
-  namesFor({ ...DEFAULT_GENERATE_OPTIONS, ...options, language: "csharp" });
-
-function generateTestClass(testClass: string): string {
-  return `namespace Routes.Views.Tests;
-
-public class ${testClass} { }
-`;
-}
-
-function generateRouterTest(
-  candidate: TestCandidate,
-  options: CsharpTestOptions = DEFAULT_GENERATE_OPTIONS,
-): GeneratedFile {
-  const names = csharpNames(options);
-  const testClass = `${names.classNamePlural(candidate.name)}RouterTests`;
-  const fileBase = names.fileBasePlural(candidate.name, "_router_tests");
-  return { path: `${fileBase}.cs`, content: generateTestClass(testClass) };
-}
-
-export const generateReadOnlyRouterTest = generateRouterTest;
-export const generateCrudRouterTest = generateRouterTest;
-
-/** Catalog `routes_tests` step (csharp). */
-export const generate = (ctx: unknown) =>
-  routesStepGenerate(
-    {
-      dispatchStep: dispatchRoutesTestsStep,
-      generator: { createGenerator },
-      language: "csharp",
-    },
-    ctx,
-  );
-
-export const createGenerator = () => ({
-  generate: (config: RoutesGenerateConfig) =>
-    generateRoutesTestsFiles({
-      ...config,
-      primitives: {
-        generateReadOnlyRouterTest,
-        generateCrudRouterTest,
-        defaultGenerateOptions: DEFAULT_GENERATE_OPTIONS,
-      },
-    }),
-});
