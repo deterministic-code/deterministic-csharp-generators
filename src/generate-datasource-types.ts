@@ -13,7 +13,7 @@ import {
 } from "./common/parse-datasource-types.ts";
 import { settingsStr } from "./common/settings.ts";
 import { convertSpecType } from "./common/type-converter.ts";
-import { typeTmpl } from "./datasource-types/resources.ts";
+import { typeTmpl } from "./resources/datasource-types.ts";
 
 type EmitOptions = {
   ds: DatasourceSettings;

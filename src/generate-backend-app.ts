@@ -11,7 +11,7 @@ import {
   envFile,
   gitignore,
   programCs,
-} from "./backend-app/resources.ts";
+} from "./resources/backend-app.ts";
 
 const DEFAULT_APP_NAME = "generated-app";
 

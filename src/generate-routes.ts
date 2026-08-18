@@ -18,7 +18,7 @@ import {
   customStubTmpl,
   nameEnrichmentTmpl,
   routerTmpl,
-} from "./routes/resources.ts";
+} from "./resources/routes.ts";
 
 type EmitOptions = {
   naming: RouteNaming;
