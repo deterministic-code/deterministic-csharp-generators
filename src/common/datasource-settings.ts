@@ -1,14 +1,6 @@
 import type { SettingsDict } from "./generate-context.ts";
 import { settingsStr } from "./settings.ts";
-import { convertSpecType } from "./type-converter.ts";
-
-const ID_CSHARP: Record<string, string> = {
-  integer: "int",
-  smallinteger: "short",
-  biginteger: "long",
-  uuid: "System.Guid",
-  string: "string",
-};
+import { convertSpecType, idTypeToNative } from "./type-converter.ts";
 
 const REFERENCE_SHAPE: Record<string, { type: string; size: number | undefined }> =
   {
@@ -33,7 +25,7 @@ export const datasourceSettings = (
     idType,
     datetimeRepr: settingsStr(settings, "datasource.datetime") ?? "native",
     withUuidColumn: idType !== "uuid",
-    csharpIdType: ID_CSHARP[idType] ?? "int",
+    csharpIdType: idTypeToNative(idType),
   };
 };
 

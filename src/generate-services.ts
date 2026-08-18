@@ -1,133 +1,77 @@
-import type { SettingsDict } from "@deterministic-code/generator-sdk/settings-dict";
+import { datasourceSettings } from "./common/datasource-settings.ts";
+import { commentStyle, type CommentStyle } from "./common/doc-comment.ts";
+import { fill } from "./common/fill.ts";
+import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
+import { content, type GenerateEntry } from "./common/generate-entry.ts";
 import {
-  generateServicesFiles,
-  dispatchServicesStep,
-  servicesStepGenerate,
-} from "@deterministic-code/generator-sdk/codegen/lib/services-generate";
+  csharpServiceNaming,
+  type ServiceNaming,
+} from "./common/naming.ts";
 import {
-  DEFAULT_COMMENT_STYLE,
-  renderDocComment,
-  type CommentStyle,
-} from "@deterministic-code/generator-sdk/generate-doc-comment";
-import type { CaseFormat } from "@deterministic-code/generator-sdk/case";
-import { namesFor } from "@deterministic-code/generator-sdk/codegen/lib/ts-codegen-naming";
+  loadServices,
+  type CustomServiceEntry,
+  type ServiceCandidate,
+} from "./common/parse-services.ts";
+import { settingsStr } from "./common/settings.ts";
+import { customStubTmpl, genericTmpl } from "./services/resources.ts";
 
-interface ServiceCandidate {
-  name: string;
-  datasourceType?: string;
-}
-
-interface CustomServiceEntry {
-  name: string;
-}
-
-interface CsharpGenerateOptions {
-  fileFormat?: CaseFormat;
-  style?: CommentStyle;
-}
-
-interface GeneratedFile {
-  path: string;
-  content: string;
-}
-
-interface ServicesGenerateConfig {
-  services: unknown;
-  viewTypes: unknown;
-  datasourceTypes: unknown;
-  routes: unknown;
-  settings: SettingsDict;
-  language: unknown;
-}
-
-export const DEFAULT_GENERATE_OPTIONS = {
-  fileFormat: "Camel",
-  style: DEFAULT_COMMENT_STYLE,
+type EmitOptions = {
+  naming: ServiceNaming;
+  style: CommentStyle;
 };
 
-function serviceDoc(args: {
-  className: string;
-  style: CommentStyle;
-  datasourceType: string;
-  target: string;
-}): string {
-  return renderDocComment({
-    style: args.style,
-    summary: `Service ${args.className}.`,
-    lines: [
-      `Datasource type: ${args.datasourceType}.`,
-      `Target: ${args.target}.`,
-      `Fields: 0.`,
-    ],
-    language: "csharp",
-  });
-}
+const emitOptions = (settings: SettingsDict): EmitOptions => ({
+  naming: csharpServiceNaming(settings),
+  style: commentStyle(settingsStr(settings, "comments")),
+});
 
-export function generateGenericService(
+const docFlags = (style: CommentStyle) => ({
+  simpleDoc: style === "simple",
+  descriptionDoc: style === "description",
+});
+
+const renderGeneric = (
   candidate: ServiceCandidate,
-  options: CsharpGenerateOptions = {},
-): GeneratedFile {
-  const { fileFormat = "Camel", style = DEFAULT_COMMENT_STYLE } = options;
-  const names = namesFor({ fileFormat, language: "csharp" });
-  const className = names.className(candidate.name, "service");
-  const fileBase = names.fileBase(candidate.name, "service");
-  const doc = serviceDoc({
-    className,
-    style,
-    datasourceType: candidate.datasourceType ?? "standard",
-    target: "StandardCrud",
-  });
-  const content = `namespace Backend.Services.Views;
+  opts: EmitOptions,
+): GenerateEntry => {
+  const className = opts.naming.serviceClassName(candidate.name);
+  return content(
+    opts.naming.filePath(candidate.name),
+    fill(genericTmpl, {
+      ...docFlags(opts.style),
+      className,
+      datasourceType: candidate.datasourceType ?? "standard",
+    }),
+  );
+};
 
-${doc}public class ${className} { }
-`;
-  return { path: `${fileBase}.cs`, content };
-}
-
-export function generateCustomServiceStub(
+const renderCustom = (
   entry: CustomServiceEntry,
-  options: CsharpGenerateOptions = {},
-): GeneratedFile {
-  const { fileFormat = "Camel", style = DEFAULT_COMMENT_STYLE } = options;
-  const names = namesFor({ fileFormat, language: "csharp" });
+  opts: EmitOptions,
+): GenerateEntry => {
   const className = entry.name;
   const interfaceName = `I${className}`;
-  const fileBase = names.casedFileStem(entry.name);
-  const doc = serviceDoc({
-    className,
-    style,
-    datasourceType: "standard",
-    target: "Custom",
-  });
-  const content = `namespace Backend.Services.Custom;
-
-${doc}public interface ${interfaceName} { }
-
-${doc}public class ${className} : ${interfaceName} { }
-`;
-  return { path: `../custom/${fileBase}.cs`, content };
-}
-
-/** Catalog `services` step (csharp). */
-export const generate = (ctx: unknown) =>
-  servicesStepGenerate(
-    {
-      dispatchStep: dispatchServicesStep,
-      generator: { createGenerator },
-      language: "csharp",
-    },
-    ctx,
-  );
-
-/** Generator owns its render primitives + options; the shared orchestration in services-generate.ts does the rest. */
-export const createGenerator = () => ({
-  generate: (config: ServicesGenerateConfig) =>
-    generateServicesFiles({
-      ...config,
-      primitives: {
-        generateGenericService,
-        generateCustomServiceStub,
-        defaultGenerateOptions: DEFAULT_GENERATE_OPTIONS,
-      },
+  return content(
+    opts.naming.customStubPath(entry.name),
+    fill(customStubTmpl, {
+      ...docFlags(opts.style),
+      interfaceName,
+      className,
     }),
-});
+  );
+};
+
+export const generate = async (
+  ctx: GenerateContext,
+): Promise<GenerateEntry[]> => {
+  const opts = emitOptions(ctx.settings);
+  const ds = datasourceSettings(ctx.settings);
+  const { generics, customs } = await loadServices(ctx.reader, {
+    idType: ds.idType,
+    serviceClassName: opts.naming.serviceClassName,
+  });
+  return [
+    ...generics.map((c) => renderGeneric(c, opts)),
+    ...customs.map((c) => renderCustom(c, opts)),
+  ];
+};
