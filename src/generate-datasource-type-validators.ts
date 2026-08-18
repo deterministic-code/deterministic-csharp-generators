@@ -15,7 +15,7 @@ import {
 import { settingsStr } from "./common/settings.ts";
 import { convertSpecType } from "./common/type-converter.ts";
 import { isFiniteInt, isFiniteNumber } from "./common/yaml-entry.ts";
-import { typeTmpl } from "./datasource-type-validators/resources.ts";
+import { typeTmpl } from "./resources/datasource-type-validators.ts";
 
 type EmitOptions = {
   ds: DatasourceSettings;

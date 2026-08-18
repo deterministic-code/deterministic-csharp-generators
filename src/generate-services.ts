@@ -13,7 +13,7 @@ import {
   type ServiceCandidate,
 } from "./common/parse-services.ts";
 import { settingsStr } from "./common/settings.ts";
-import { customStubTmpl, genericTmpl } from "./services/resources.ts";
+import { customStubTmpl, genericTmpl } from "./resources/services.ts";
 
 type EmitOptions = {
   naming: ServiceNaming;
