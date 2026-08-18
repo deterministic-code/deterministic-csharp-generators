@@ -1,0 +1,28 @@
+// schema-version: {{schemaVersion}}
+using FluentValidation;
+using Backend.Types.View;
+using Backend.Types.Datasource;
+using Backend.Validators.Datasource;
+
+namespace Backend.Validators.View;
+
+{{#isUnion}}public class {{validatorClass}}
+{
+    public void ValidateAndThrow(object obj)
+    {
+{{#branches}}
+        {{&line}}
+{{/branches}}
+        throw new ValidationException("Unknown union variant for {{className}}.");
+    }
+}
+{{/isUnion}}{{#isShaped}}public class {{validatorClass}} : AbstractValidator<Backend.Types.View.{{className}}>
+{
+    public {{validatorClass}}()
+    {
+{{#rules}}
+{{&line}}
+{{/rules}}
+    }
+}
+{{/isShaped}}

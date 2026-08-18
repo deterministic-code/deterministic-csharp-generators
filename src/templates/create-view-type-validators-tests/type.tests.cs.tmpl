@@ -1,0 +1,30 @@
+// schema-version: {{schemaVersion}}
+using Xunit;
+using FluentValidation;
+{{#needsList}}
+using System.Collections.Generic;
+{{/needsList}}
+using Backend.Types.View;
+using Backend.Types.Datasource;
+using Backend.Validators.View;
+using Backend.Validators.Datasource;
+
+namespace Backend.Tests.View;
+
+public class {{className}}ValidatorTests
+{
+{{#cases}}
+    [Fact]
+    public void {{ident}}()
+    {
+        var value = {{&fixture}};
+{{#isUnion}}
+        new {{validatorClass}}().ValidateAndThrow(value);
+        Assert.NotNull(value);
+{{/isUnion}}{{^isUnion}}
+        var result = new {{validatorClass}}().Validate(value);
+        Assert.{{assertion}}(result.IsValid);
+{{/isUnion}}
+    }
+{{/cases}}
+}

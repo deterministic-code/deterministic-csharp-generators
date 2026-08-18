@@ -18,6 +18,15 @@ const NATIVE: Record<string, string> = {
   reference: "long",
 };
 
+/** `datasource.id_type` → C# id type. */
+const ID_NATIVE: Record<string, string> = {
+  integer: "int",
+  smallinteger: "short",
+  biginteger: "long",
+  uuid: "System.Guid",
+  string: "string",
+};
+
 export const convertSpecType = (
   specType: string,
   datetimeRepr: string,
@@ -27,3 +36,6 @@ export const convertSpecType = (
   if (!native) throw new Error(`Unknown spec field type: ${specType}`);
   return native;
 };
+
+export const idTypeToNative = (idType: string): string =>
+  ID_NATIVE[idType] ?? ID_NATIVE.integer;

@@ -1,0 +1,49 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+
+namespace Routes.Enrichment;
+
+public static class {{className}}
+{
+    public static async Task<IList<T>> EnrichItemsWith{{targetPascal}}NameAsync<T>(
+        IList<T> items,
+        I{{targetPascal}}NameSource source)
+    {
+        if (items.Count == 0) return items;
+        var rows = await source.FindAllAsync();
+        var map = rows.ToDictionary(r => r.Id, r => r.Name);
+        foreach (var item in items)
+        {
+            var id = (long)(item!.GetType().GetProperty("{{fkProp}}")!.GetValue(item)!);
+            if (!map.TryGetValue(id, out var name))
+            {
+                throw new InvalidOperationException(
+                    $"EnrichItemsWith{{targetPascal}}NameAsync: no {{targetTable}} row for id {id}");
+            }
+            item.GetType().GetProperty("{{nameProp}}")?.SetValue(item, name);
+        }
+        return items;
+    }
+
+    public static async Task<T> EnrichItemWith{{targetPascal}}NameAsync<T>(
+        T item,
+        I{{targetPascal}}NameSource source)
+    {
+        var id = (long)(item!.GetType().GetProperty("{{fkProp}}")!.GetValue(item)!);
+        var row = await source.FindAsync(id)
+            ?? throw new InvalidOperationException(
+                $"EnrichItemWith{{targetPascal}}NameAsync: no {{targetTable}} row for id {id}");
+        item.GetType().GetProperty("{{nameProp}}")?.SetValue(item, row.Name);
+        return item;
+    }
+}
+
+public interface I{{targetPascal}}NameSource
+{
+    Task<IReadOnlyList<{{targetPascal}}NameRow>> FindAllAsync();
+    Task<{{targetPascal}}NameRow?> FindAsync(long id);
+}
+
+public sealed record {{targetPascal}}NameRow(long Id, string Name);

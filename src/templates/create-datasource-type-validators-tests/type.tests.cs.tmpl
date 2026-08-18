@@ -1,0 +1,20 @@
+// schema-version: {{schemaVersion}}
+using Xunit;
+using FluentValidation;
+using Backend.Types.Datasource;
+using Backend.Validators.Datasource;
+
+namespace Backend.Tests.Datasource;
+
+public class {{className}}ValidatorTests
+{
+{{#cases}}
+    [Fact]
+    public void {{ident}}()
+    {
+        var value = {{&fixture}};
+        var result = new {{validatorClass}}().Validate(value);
+        Assert.{{assertion}}(result.IsValid);
+    }
+{{/cases}}
+}

@@ -1,0 +1,22 @@
+// schema-version: {{schemaVersion}}
+{{#needsList}}
+using System.Collections.Generic;
+
+{{/needsList}}
+namespace Backend.Types.View;
+
+{{#simpleDoc}}/** View {{className}}. */
+{{/simpleDoc}}{{#descriptionDoc}}/**
+ * View {{className}}.
+ * Datasource type: {{datasourceType}}.
+ * Target: {{target}}.
+ * Fields: {{fieldCount}}.
+ */
+{{/descriptionDoc}}{{#isUnion}}public interface {{className}} {}
+{{/isUnion}}{{#isShaped}}public class {{className}}{{#hasExtends}} : {{&extendsType}}{{/hasExtends}}
+{
+{{#fields}}
+    public {{&csType}} {{ident}} { get; set; }
+{{/fields}}
+}
+{{/isShaped}}

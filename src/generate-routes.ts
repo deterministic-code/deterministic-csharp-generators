@@ -1,202 +1,119 @@
+import { datasourceSettings } from "./common/datasource-settings.ts";
+import { commentStyle, type CommentStyle } from "./common/doc-comment.ts";
+import { fill } from "./common/fill.ts";
+import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
+import { content, type GenerateEntry } from "./common/generate-entry.ts";
 import {
-  generateRoutesFiles,
-  dispatchRoutesStep,
-  routesStepGenerate,
-} from "@deterministic-code/generator-sdk/codegen/lib/routes-generate";
+  csharpRouteNaming,
+  type RouteNaming,
+} from "./common/naming.ts";
 import {
-  DEFAULT_COMMENT_STYLE,
-  renderDocComment,
-  type CommentStyle,
-} from "@deterministic-code/generator-sdk/generate-doc-comment";
-import type { CodegenNames } from "@deterministic-code/generator-sdk/codegen-naming";
-import type { CaseFormat } from "@deterministic-code/generator-sdk/case";
-import { namesFor } from "@deterministic-code/generator-sdk/codegen/lib/ts-codegen-naming";
-import type {
-  GeneratedFile,
-  RoutesGenerateConfig,
-} from "@deterministic-code/generator-sdk/codegen/lib/routes-generate-types";
+  loadRoutes,
+  type CustomRouteEntry,
+  type RouteCandidate,
+} from "./common/parse-routes.ts";
+import { loadViewTypes } from "./common/parse-view-types.ts";
+import { settingsStr } from "./common/settings.ts";
+import {
+  customStubTmpl,
+  nameEnrichmentTmpl,
+  routerTmpl,
+} from "./routes/resources.ts";
 
-interface CsharpGenerateOptions {
-  fileFormat?: CaseFormat;
-  style?: CommentStyle;
-  language?: string;
-}
-
-interface RouteCandidate {
-  name: string;
-}
-
-interface EnrichmentDescriptor {
-  targetTable: string;
-}
-
-type RouteEntry = Record<string, unknown>;
-
-export const DEFAULT_GENERATE_OPTIONS: CsharpGenerateOptions = {
-  fileFormat: "Camel",
-  style: DEFAULT_COMMENT_STYLE,
+type EmitOptions = {
+  naming: RouteNaming;
+  style: CommentStyle;
 };
 
-const csharpNames = (options: CsharpGenerateOptions): CodegenNames =>
-  namesFor({ ...DEFAULT_GENERATE_OPTIONS, ...options, language: "csharp" });
-
-function generateRouterClass(
-  className: string,
-  style: CommentStyle = DEFAULT_COMMENT_STYLE,
-): string {
-  const interfaceName = `I${className}`;
-  const descLines = [
-    `Route ${className}.`,
-    `Datasource type: standard.`,
-    `Target: StandardCrud.`,
-  ];
-  const doc = renderDocComment({
-    style,
-    summary: `Route ${className}.`,
-    lines: descLines,
-    language: "csharp",
-  });
-  return `namespace Routes.Views;
-
-${doc}public interface ${interfaceName} { }
-
-${doc}public class ${className} : ${interfaceName} { }
-`;
-}
-
-function generateRouterFile(
-  candidate: RouteCandidate,
-  options: CsharpGenerateOptions,
-): GeneratedFile {
-  const { style = DEFAULT_COMMENT_STYLE } = options;
-  const names = csharpNames(options);
-  const className = `${names.classNamePlural(candidate.name)}Router`;
-  const fileBase = names.fileBasePlural(candidate.name, "_router");
-  return {
-    path: `${fileBase}.cs`,
-    content: generateRouterClass(className, style),
-  };
-}
-
-export function generateReadOnlyRouter(
-  candidate: RouteCandidate,
-  options: CsharpGenerateOptions = {},
-): GeneratedFile {
-  return generateRouterFile(candidate, options);
-}
-
-export function generateCrudRouter(
-  candidate: RouteCandidate,
-  options: CsharpGenerateOptions = {},
-): GeneratedFile {
-  return generateRouterFile(candidate, options);
-}
-
-export function generateNameEnrichmentHelper(
-  { targetTable }: EnrichmentDescriptor,
-  options: CsharpGenerateOptions = {},
-): GeneratedFile {
-  const names = csharpNames(options);
-  const targetPascal = names.className(targetTable);
-  const className = `${targetPascal}NameEnrichment`;
-  const fkProp = `${targetPascal}Id`;
-  const nameProp = `${targetPascal}Name`;
-  const fileBase = names.fileBase(targetTable, "enrichment");
-  const content = `using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Threading.Tasks;
-
-namespace Routes.Enrichment;
-
-public static class ${className}
-{
-    public static async Task<IList<T>> EnrichItemsWith${targetPascal}NameAsync<T>(
-        IList<T> items,
-        I${targetPascal}NameSource source)
-    {
-        if (items.Count == 0) return items;
-        var rows = await source.FindAllAsync();
-        var map = rows.ToDictionary(r => r.Id, r => r.Name);
-        foreach (var item in items)
-        {
-            var id = (long)(item!.GetType().GetProperty("${fkProp}")!.GetValue(item)!);
-            if (!map.TryGetValue(id, out var name))
-            {
-                throw new InvalidOperationException(
-                    $"EnrichItemsWith${targetPascal}NameAsync: no ${targetTable} row for id {id}");
-            }
-            item.GetType().GetProperty("${nameProp}")?.SetValue(item, name);
-        }
-        return items;
-    }
-
-    public static async Task<T> EnrichItemWith${targetPascal}NameAsync<T>(
-        T item,
-        I${targetPascal}NameSource source)
-    {
-        var id = (long)(item!.GetType().GetProperty("${fkProp}")!.GetValue(item)!);
-        var row = await source.FindAsync(id)
-            ?? throw new InvalidOperationException(
-                $"EnrichItemWith${targetPascal}NameAsync: no ${targetTable} row for id {id}");
-        item.GetType().GetProperty("${nameProp}")?.SetValue(item, row.Name);
-        return item;
-    }
-}
-
-public interface I${targetPascal}NameSource
-{
-    Task<IReadOnlyList<${targetPascal}NameRow>> FindAllAsync();
-    Task<${targetPascal}NameRow?> FindAsync(long id);
-}
-
-public sealed record ${targetPascal}NameRow(long Id, string Name);
-`;
-  return {
-    path: `${fileBase}.cs`,
-    content,
-  };
-}
-
-export function generateCustomRouteStub(
-  entry: RouteEntry,
-  options: CsharpGenerateOptions = {},
-): GeneratedFile {
-  const [name] = Object.keys(entry);
-  const names = csharpNames(options);
-  const className = `${names.className(name)}Route`;
-  const interfaceName = `I${className}`;
-  const fileBase = names.customRouteFileBase(name);
-  const content = `namespace Routes.Custom;
-
-public interface ${interfaceName} { }
-
-public class ${className} : ${interfaceName} { }
-`;
-  return { path: `../custom/${fileBase}.cs`, content };
-}
-
-/** Catalog `routes` step (csharp). */
-export const generate = (ctx: unknown) =>
-  routesStepGenerate(
-    {
-      dispatchStep: dispatchRoutesStep,
-      generator: { createGenerator },
-      language: "csharp",
-    },
-    ctx,
-  );
-
-export const createGenerator = () => ({
-  generate: (config: RoutesGenerateConfig) =>
-    generateRoutesFiles({
-      ...config,
-      primitives: {
-        generateCrudRouter,
-        generateReadOnlyRouter,
-        generateCustomRouteStub,
-        generateNameEnrichmentHelper,
-        nestedRouterGenerators: {},
-      },
-    }),
+const emitOptions = (settings: SettingsDict): EmitOptions => ({
+  naming: csharpRouteNaming(settings),
+  style: commentStyle(settingsStr(settings, "comments")),
 });
+
+const docFlags = (style: CommentStyle) => ({
+  simpleDoc: style === "simple",
+  descriptionDoc: style === "description",
+});
+
+const renderRouter = (
+  candidate: RouteCandidate,
+  opts: EmitOptions,
+): GenerateEntry => {
+  const className = opts.naming.routerClassName(candidate.name);
+  return content(
+    opts.naming.filePath(candidate.name),
+    fill(routerTmpl, {
+      ...docFlags(opts.style),
+      className,
+      interfaceName: `I${className}`,
+    }),
+  );
+};
+
+const renderCustom = (
+  entry: CustomRouteEntry,
+  opts: EmitOptions,
+): GenerateEntry => {
+  const className = opts.naming.customRouteClassName(entry.name);
+  return content(
+    opts.naming.customStubPath(entry.name),
+    fill(customStubTmpl, {
+      interfaceName: `I${className}`,
+      className,
+    }),
+  );
+};
+
+const renderEnrichment = (
+  targetTable: string,
+  opts: EmitOptions,
+): GenerateEntry => {
+  const targetPascal = opts.naming.className(targetTable);
+  return content(
+    opts.naming.enrichmentFilePath(targetTable),
+    fill(nameEnrichmentTmpl, {
+      className: opts.naming.enrichmentClassName(targetTable),
+      targetPascal,
+      targetTable,
+      fkProp: `${targetPascal}Id`,
+      nameProp: `${targetPascal}Name`,
+    }),
+  );
+};
+
+/** Unique enrichment targets from shaped views (auto-enrich), deduped by table. */
+const enrichmentTargets = async (
+  reader: GenerateContext["reader"],
+  survivorNames: Set<string>,
+): Promise<string[]> => {
+  const views = await loadViewTypes(reader);
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const view of views) {
+    if (view.kind !== "shaped") continue;
+    if (!survivorNames.has(view.name)) continue;
+    for (const e of view.enrichments) {
+      if (seen.has(e.targetTable)) continue;
+      seen.add(e.targetTable);
+      out.push(e.targetTable);
+    }
+  }
+  return out;
+};
+
+export const generate = async (
+  ctx: GenerateContext,
+): Promise<GenerateEntry[]> => {
+  const opts = emitOptions(ctx.settings);
+  const ds = datasourceSettings(ctx.settings);
+  const { candidates, customs } = await loadRoutes(ctx.reader, {
+    idType: ds.idType,
+  });
+  const survivorNames = new Set(candidates.map((c) => c.name));
+  const targets = await enrichmentTargets(ctx.reader, survivorNames);
+  return [
+    ...candidates.map((c) => renderRouter(c, opts)),
+    ...customs.map((c) => renderCustom(c, opts)),
+    ...targets.map((t) => renderEnrichment(t, opts)),
+  ];
+};
