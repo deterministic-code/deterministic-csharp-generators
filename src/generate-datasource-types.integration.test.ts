@@ -86,10 +86,10 @@ describe("generate", () => {
     assert.match(user, /namespace Backend\.Types\.Datasource;/);
     assert.match(
       user,
-      /public class User : StandardDataSourceWithUuid<int, string, System\.DateTime>/,
+      /public class User : StandardDataSourceWithUuid<long, string, System\.DateTime>/,
     );
-    assert.match(user, /public int Id \{ get; set; \}/);
+    assert.match(user, /public long Id \{ get; set; \}/);
     assert.match(user, /public string Email \{ get; set; \}/);
-    assert.match(user, /public int RoleId \{ get; set; \}/);
+    assert.match(user, /public long RoleId \{ get; set; \}/);
   });
 });
