@@ -1,17 +1,18 @@
-import { fill } from "./common/fill.ts";
-import type { GenerateContext } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
-import { datasourceSettings } from "./common/datasource-settings.ts";
-import { csharpRouteNaming } from "./common/naming.ts";
-import { loadRoutes } from "./common/parse-routes.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { routePaths } from "./common/paths.ts";
+import {
+  SpecificationParser,
+} from "./specification-parser.ts";
 import { genericTmpl } from "./resources/routes-tests.ts";
 
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  const naming = csharpRouteNaming(ctx.settings);
-  const { candidates } = await loadRoutes(ctx.reader, {
-    idType: datasourceSettings(ctx.settings).idType,
+  const naming = routePaths(ctx.settings);
+  const { candidates } = await new SpecificationParser(ctx.reader).loadRoutes({
+    idType: ctx.settings["datasource.id_type"] ?? "integer",
   });
   return candidates.map((c) => {
     const testClass = `${naming.routerClassName(c.name)}Tests`;

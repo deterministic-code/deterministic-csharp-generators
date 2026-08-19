@@ -39,3 +39,11 @@ export const convertSpecType = (
 
 export const idTypeToNative = (idType: string): string =>
   ID_NATIVE[idType] ?? ID_NATIVE.integer;
+
+export const nativeFieldType = (
+  ds: { idType: string; datetimeRepr: string },
+  field: { name?: string; type: string; references?: string },
+): string =>
+  field.name === "id" || field.references?.split(".")[1] === "id"
+    ? idTypeToNative(ds.idType)
+    : convertSpecType(field.type, ds.datetimeRepr);

@@ -1,40 +1,58 @@
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  datasourceSettings,
-  type DatasourceSettings,
-} from "./common/datasource-settings.ts";
-import { commentStyle, type CommentStyle } from "./common/doc-comment.ts";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
-import { csharpNaming, type ArtifactNaming } from "./common/naming.ts";
-import {
-  loadDatasourceTypes,
+  SpecificationParser,
   type DatasourceType,
-} from "./common/parse-datasource-types.ts";
-import { settingsStr } from "./common/settings.ts";
-import { convertSpecType } from "./common/type-converter.ts";
+} from "./specification-parser.ts";
+import { convertSpecType, idTypeToNative, nativeFieldType } from "./common/type-converter.ts";
 import { typeTmpl } from "./resources/datasource-types.ts";
 
-type EmitOptions = {
-  ds: DatasourceSettings;
-  naming: ArtifactNaming;
-  schemaVersion: string;
-  style: CommentStyle;
+type Datasource = {
+  idType: string;
+  datetimeRepr: string;
+  withUuidColumn: boolean;
 };
 
-const emitOptions = (settings: SettingsDict): EmitOptions => {
-  const ds = datasourceSettings(settings);
+const datasource = (settings: Record<string, string>): Datasource => {
+  const idType = settings["datasource.id_type"] ?? "integer";
+  return {
+    idType,
+    datetimeRepr: settings["datasource.datetime"] ?? "native",
+    withUuidColumn: idType !== "uuid",
+  };
+};
+
+const docTokens = (settings: Record<string, string>) => {
+  const comments = settings["comments"];
+  return {
+    simpleDoc: comments !== "none" && comments !== "description",
+    descriptionDoc: comments === "description",
+  };
+};
+
+type EmitOptions = {
+  ds: Datasource;
+  naming: ArtifactPaths;
+  schemaVersion: string;
+  simpleDoc: boolean;
+  descriptionDoc: boolean;
+};
+
+const emitOptions = (settings: Record<string, string>): EmitOptions => {
+  const ds = datasource(settings);
   return {
     ds,
-    naming: csharpNaming(settings),
-    schemaVersion: settingsStr(settings, "codegen.schema_version") ?? "1.0",
-    style: commentStyle(settingsStr(settings, "comments")),
+    naming: datasourcePaths(settings),
+    schemaVersion: settings["codegen.schema_version"] ?? "1.0",
+    ...docTokens(settings),
   };
 };
 
 const tableFields = (
   table: DatasourceType,
-  ds: DatasourceSettings,
+  ds: Datasource,
 ): Array<{ name: string; type: string; isNullable: boolean }> =>
   [
     { name: "id", type: ds.idType, isNullable: false },
@@ -45,13 +63,15 @@ const tableFields = (
   ].filter((f) => ds.withUuidColumn || f.name !== "uuid");
 
 const csTypeFor = (
-  field: { name: string; type: string; isNullable: boolean },
-  ds: DatasourceSettings,
+  field: {
+    name: string;
+    type: string;
+    isNullable: boolean;
+    references?: string;
+  },
+  ds: Datasource,
 ): string => {
-  const t =
-    field.name === "id"
-      ? ds.csharpIdType
-      : convertSpecType(field.type, ds.datetimeRepr);
+  const t = nativeFieldType(ds, field);
   return field.isNullable ? `${t}?` : t;
 };
 
@@ -59,7 +79,7 @@ const renderType = (
   table: DatasourceType,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const { ds, naming, schemaVersion, style } = opts;
+  const { ds, naming, schemaVersion, simpleDoc, descriptionDoc } = opts;
   const fields = tableFields(table, ds);
   const dt = convertSpecType("datetime", ds.datetimeRepr);
   const className = naming.className(table.name);
@@ -67,8 +87,8 @@ const renderType = (
     naming.filePath(table.name),
     fill(typeTmpl, {
       schemaVersion,
-      simpleDoc: style === "simple",
-      descriptionDoc: style === "description",
+      simpleDoc,
+      descriptionDoc,
       className,
       datasourceType: table.datasourceType,
       fieldCount: String(fields.length),
@@ -76,8 +96,8 @@ const renderType = (
         ? "StandardDataSourceWithUuid"
         : "StandardDataSource",
       typeArgs: ds.withUuidColumn
-        ? `${ds.csharpIdType}, string, ${dt}`
-        : `${ds.csharpIdType}, ${dt}`,
+        ? `${idTypeToNative(ds.idType)}, string, ${dt}`
+        : `${idTypeToNative(ds.idType)}, ${dt}`,
       fields: fields.map((f) => ({
         ident: naming.fieldName(f.name),
         csType: csTypeFor(f, ds),
@@ -90,6 +110,6 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const opts = emitOptions(ctx.settings);
-  const types = await loadDatasourceTypes(ctx.reader, opts.ds.idType);
+  const types = await new SpecificationParser(ctx.reader).loadDatasourceTypes(opts.ds.idType);
   return types.map((table) => renderType(table, opts));
 };

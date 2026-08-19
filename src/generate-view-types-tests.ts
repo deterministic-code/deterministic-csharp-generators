@@ -1,19 +1,17 @@
-import { datasourceSettings } from "./common/datasource-settings.ts";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
-import { csharpNaming, type ArtifactNaming } from "./common/naming.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  loadViewTypes,
+  SpecificationParser,
   type ViewField,
   type ViewType,
-} from "./common/parse-view-types.ts";
-import { settingsStr } from "./common/settings.ts";
+} from "./specification-parser.ts";
 import { convertSpecType } from "./common/type-converter.ts";
 import { typeTestTmpl } from "./resources/view-types-tests.ts";
 
 type EmitOptions = {
-  naming: ArtifactNaming;
+  naming: ArtifactPaths;
   schemaVersion: string;
   datetimeRepr: string;
 };
@@ -25,10 +23,10 @@ type FieldTok = {
   nullable: boolean;
 };
 
-const emitOptions = (settings: SettingsDict): EmitOptions => ({
-  naming: csharpNaming(settings),
-  schemaVersion: settingsStr(settings, "codegen.schema_version") ?? "1.0",
-  datetimeRepr: datasourceSettings(settings).datetimeRepr,
+const emitOptions = (settings: Record<string, string>): EmitOptions => ({
+  naming: viewPaths(settings),
+  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
+  datetimeRepr: settings["datasource.datetime"] ?? "native",
 });
 
 const samplesForNative = (
@@ -103,7 +101,7 @@ const fieldTokens = (field: ViewField, opts: EmitOptions): FieldTok => {
   };
 };
 
-const testPath = (entity: string, naming: ArtifactNaming): string =>
+const testPath = (entity: string, naming: ArtifactPaths): string =>
   naming.filePath(entity).replace(/\.cs$/, "Tests.cs");
 
 const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
@@ -135,6 +133,6 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const opts = emitOptions(ctx.settings);
-  const views = await loadViewTypes(ctx.reader);
+  const views = await new SpecificationParser(ctx.reader).loadViewTypes();
   return views.map((view) => renderTests(view, opts));
 };
