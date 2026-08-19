@@ -1,34 +1,33 @@
 import { pascalCase } from "change-case";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
-import { csharpNaming, type ArtifactNaming } from "./common/naming.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  loadViewTypes,
+  SpecificationParser,
   type ShapedView,
   type ViewField,
   type ViewType,
-} from "./common/parse-view-types.ts";
-import { settingsStr } from "./common/settings.ts";
+} from "./specification-parser.ts";
 import { typeTmpl } from "./resources/view-type-validators.ts";
 
 type EmitOptions = {
-  naming: ArtifactNaming;
+  naming: ArtifactPaths;
   schemaVersion: string;
 };
 
-const emitOptions = (settings: SettingsDict): EmitOptions => ({
-  naming: csharpNaming(settings),
-  schemaVersion: settingsStr(settings, "codegen.schema_version") ?? "1.0",
+const emitOptions = (settings: Record<string, string>): EmitOptions => ({
+  naming: viewPaths(settings),
+  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
-const viewValidator = (name: string, naming: ArtifactNaming): string =>
+const viewValidator = (name: string, naming: ArtifactPaths): string =>
   `${naming.className(name)}Validator`;
 
-const datasourceValidator = (name: string, naming: ArtifactNaming): string =>
+const datasourceValidator = (name: string, naming: ArtifactPaths): string =>
   `Datasource${naming.className(name)}Validator`;
 
-const nestedValidator = (field: ViewField, naming: ArtifactNaming): string =>
+const nestedValidator = (field: ViewField, naming: ArtifactPaths): string =>
   field.kind === "datasource"
     ? datasourceValidator(field.base, naming)
     : viewValidator(field.base, naming);
@@ -53,7 +52,7 @@ const inlinesParent = (view: ShapedView): boolean =>
   view.inherits !== null &&
   (view.enrichments.length > 0 || view.omit.length > 0);
 
-const validatorPath = (entity: string, naming: ArtifactNaming): string =>
+const validatorPath = (entity: string, naming: ArtifactPaths): string =>
   naming.filePath(entity).replace(/\.cs$/, "Validator.cs");
 
 const renderView = (view: ViewType, opts: EmitOptions): GenerateEntry => {
@@ -104,6 +103,6 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const opts = emitOptions(ctx.settings);
-  const views = await loadViewTypes(ctx.reader);
+  const views = await new SpecificationParser(ctx.reader).loadViewTypes();
   return views.map((view) => renderView(view, opts));
 };

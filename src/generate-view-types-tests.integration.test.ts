@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { memoryReader } from "./common/deterministic-reader.ts";
-import { DATASOURCE_TYPES_YAML } from "./common/parse-datasource-types.ts";
-import { VIEW_TYPES_YAML } from "./common/parse-view-types.ts";
-import type { GenerateEntry } from "./common/generate-entry.ts";
+import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
+import {
+  DATASOURCE_TYPES_YAML,
+  VIEW_TYPES_YAML,
+} from "./specification-parser.ts";
+import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { generate } from "./generate-view-types-tests.ts";
 
 const DS_YAML = `types:
@@ -274,30 +276,4 @@ types: []
     assert.match(card, /var next = "2024-01-02T00:00:00.000Z";/);
   });
 
-  it("fields casing changes getter and setter identifiers", async () => {
-    const camel = await bodyOf("UserSummaryTests.cs", {
-      "languages.csharp.casing.fields": "camel",
-    });
-    assert.match(camel, /public void GetsdisplayName\(/);
-    assert.match(camel, /value\.displayName = next;/);
-  });
-
-  it("types casing changes the generated class name", async () => {
-    const card = await bodyOf("CardPaymentTests.cs", {
-      "languages.csharp.casing.types": "camel",
-    });
-    assert.match(card, /private static cardPayment Sample\(\) => new cardPayment/);
-  });
-
-  it("file_names casing changes the emitted filename", async () => {
-    const emitted = await generateWith(
-      { "languages.csharp.casing.file_names": "snake" },
-      SIMPLE_VIEW_YAML,
-      undefined,
-    );
-    assert.equal(
-      emitted.some((e) => e.filename === "card_paymentTests.cs"),
-      true,
-    );
-  });
 });

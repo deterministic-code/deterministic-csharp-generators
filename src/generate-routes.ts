@@ -1,38 +1,38 @@
-import { datasourceSettings } from "./common/datasource-settings.ts";
-import { commentStyle, type CommentStyle } from "./common/doc-comment.ts";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import {
-  csharpRouteNaming,
-  type RouteNaming,
-} from "./common/naming.ts";
+  routePaths,
+  type RoutePaths,
+} from "./common/paths.ts";
 import {
-  loadRoutes,
+  SpecificationParser,
   type CustomRouteEntry,
   type RouteCandidate,
-} from "./common/parse-routes.ts";
-import { loadViewTypes } from "./common/parse-view-types.ts";
-import { settingsStr } from "./common/settings.ts";
+} from "./specification-parser.ts";
 import {
   customStubTmpl,
   nameEnrichmentTmpl,
   routerTmpl,
 } from "./resources/routes.ts";
 
-type EmitOptions = {
-  naming: RouteNaming;
-  style: CommentStyle;
+const docTokens = (settings: Record<string, string>) => {
+  const comments = settings["comments"];
+  return {
+    simpleDoc: comments !== "none" && comments !== "description",
+    descriptionDoc: comments === "description",
+  };
 };
 
-const emitOptions = (settings: SettingsDict): EmitOptions => ({
-  naming: csharpRouteNaming(settings),
-  style: commentStyle(settingsStr(settings, "comments")),
-});
+type EmitOptions = {
+  naming: RoutePaths;
+  simpleDoc: boolean;
+  descriptionDoc: boolean;
+};
 
-const docFlags = (style: CommentStyle) => ({
-  simpleDoc: style === "simple",
-  descriptionDoc: style === "description",
+const emitOptions = (settings: Record<string, string>): EmitOptions => ({
+  naming: routePaths(settings),
+  ...docTokens(settings),
 });
 
 const renderRouter = (
@@ -43,7 +43,8 @@ const renderRouter = (
   return content(
     opts.naming.filePath(candidate.name),
     fill(routerTmpl, {
-      ...docFlags(opts.style),
+      simpleDoc: opts.simpleDoc,
+      descriptionDoc: opts.descriptionDoc,
       className,
       interfaceName: `I${className}`,
     }),
@@ -86,7 +87,7 @@ const enrichmentTargets = async (
   reader: GenerateContext["reader"],
   survivorNames: Set<string>,
 ): Promise<string[]> => {
-  const views = await loadViewTypes(reader);
+  const views = await new SpecificationParser(reader).loadViewTypes();
   const seen = new Set<string>();
   const out: string[] = [];
   for (const view of views) {
@@ -105,9 +106,8 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const opts = emitOptions(ctx.settings);
-  const ds = datasourceSettings(ctx.settings);
-  const { candidates, customs } = await loadRoutes(ctx.reader, {
-    idType: ds.idType,
+  const { candidates, customs } = await new SpecificationParser(ctx.reader).loadRoutes({
+    idType: ctx.settings["datasource.id_type"] ?? "integer",
   });
   const survivorNames = new Set(candidates.map((c) => c.name));
   const targets = await enrichmentTargets(ctx.reader, survivorNames);

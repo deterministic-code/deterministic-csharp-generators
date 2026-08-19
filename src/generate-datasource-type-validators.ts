@@ -1,25 +1,35 @@
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  datasourceSettings,
-  type DatasourceSettings,
-} from "./common/datasource-settings.ts";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
-import { csharpNaming, type ArtifactNaming } from "./common/naming.ts";
-import {
+  SpecificationParser,
   DATASOURCE_TYPES_YAML,
-  parseDatasourceTypes,
   type DatasourceField,
   type DatasourceType,
-} from "./common/parse-datasource-types.ts";
-import { settingsStr } from "./common/settings.ts";
-import { convertSpecType } from "./common/type-converter.ts";
-import { isFiniteInt, isFiniteNumber } from "./common/yaml-entry.ts";
+} from "./specification-parser.ts";
+import { convertSpecType, idTypeToNative } from "./common/type-converter.ts";
+import { isFiniteInt, isFiniteNumber } from "@deterministic-code/generators-common/yaml-entry";
 import { typeTmpl } from "./resources/datasource-type-validators.ts";
 
+type Datasource = {
+  idType: string;
+  datetimeRepr: string;
+  withUuidColumn: boolean;
+};
+
+const datasource = (settings: Record<string, string>): Datasource => {
+  const idType = settings["datasource.id_type"] ?? "integer";
+  return {
+    idType,
+    datetimeRepr: settings["datasource.datetime"] ?? "native",
+    withUuidColumn: idType !== "uuid",
+  };
+};
+
 type EmitOptions = {
-  ds: DatasourceSettings;
-  naming: ArtifactNaming;
+  ds: Datasource;
+  naming: ArtifactPaths;
   schemaVersion: string;
   namespace: string;
   typesNamespace: string;
@@ -44,10 +54,10 @@ const STANDARD_COLUMNS: ReadonlyArray<FieldShape> = [
 const UUID_PATTERN =
   "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 
-const emitOptions = (settings: SettingsDict): EmitOptions => ({
-  ds: datasourceSettings(settings),
-  naming: csharpNaming(settings),
-  schemaVersion: settingsStr(settings, "codegen.schema_version") ?? "1.0",
+const emitOptions = (settings: Record<string, string>): EmitOptions => ({
+  ds: datasource(settings),
+  naming: datasourcePaths(settings),
+  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   namespace: "Backend.Validators.Datasource",
   typesNamespace: "Backend.Types.Datasource",
 });
@@ -164,7 +174,7 @@ const ruleLine = (field: FieldShape, opts: EmitOptions): string => {
 const standardRuleLine = (name: string, opts: EmitOptions): string => {
   const prop = opts.naming.fieldName(name);
   if (name === "id") {
-    const bound = numericLiteralForNative(opts.ds.csharpIdType, 0);
+    const bound = numericLiteralForNative(idTypeToNative(opts.ds.idType), 0);
     const numeric = bound
       ? `\n            .GreaterThanOrEqualTo(${bound})`
       : "";
@@ -187,7 +197,7 @@ const standardRuleLines = (
   ).map(({ name }) => standardRuleLine(name, opts));
 };
 
-const validatorPath = (entity: string, naming: ArtifactNaming): string =>
+const validatorPath = (entity: string, naming: ArtifactPaths): string =>
   `Datasource${naming.filePath(entity).replace(/\.cs$/, "")}Validator.cs`;
 
 const renderValidator = (
@@ -216,7 +226,7 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const opts = emitOptions(ctx.settings);
-  const types = parseDatasourceTypes({
+  const types = new SpecificationParser().parseDatasourceTypes({
     yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
     idType: opts.ds.idType,
   });

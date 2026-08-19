@@ -1,32 +1,38 @@
 import { pascalCase } from "change-case";
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  datasourceSettings,
-  nativeFieldType,
   tableFields,
-  type DatasourceSettings,
-} from "./common/datasource-settings.ts";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
-import { csharpNaming, type ArtifactNaming } from "./common/naming.ts";
-import {
+  SpecificationParser,
   DATASOURCE_TYPES_YAML,
-  parseDatasourceTypes,
   type DatasourceType,
-} from "./common/parse-datasource-types.ts";
-import {
-  loadViewTypes,
   type ShapedView,
   type ViewField,
   type ViewType,
-} from "./common/parse-view-types.ts";
-import { settingsStr } from "./common/settings.ts";
-import { convertSpecType } from "./common/type-converter.ts";
+} from "./specification-parser.ts";
+import { convertSpecType, nativeFieldType } from "./common/type-converter.ts";
 import { typeTestTmpl } from "./resources/view-type-validators-tests.ts";
 
+type Datasource = {
+  idType: string;
+  datetimeRepr: string;
+  withUuidColumn: boolean;
+};
+
+const datasource = (settings: Record<string, string>): Datasource => {
+  const idType = settings["datasource.id_type"] ?? "integer";
+  return {
+    idType,
+    datetimeRepr: settings["datasource.datetime"] ?? "native",
+    withUuidColumn: idType !== "uuid",
+  };
+};
+
 type EmitOptions = {
-  ds: DatasourceSettings;
-  naming: ArtifactNaming;
+  ds: Datasource;
+  naming: ArtifactPaths;
   schemaVersion: string;
   tables: Map<string, DatasourceType>;
   views: Map<string, ViewType>;
@@ -44,10 +50,10 @@ type CaseTok = {
   assertion: string;
 };
 
-const emitBase = (settings: SettingsDict) => ({
-  ds: datasourceSettings(settings),
-  naming: csharpNaming(settings),
-  schemaVersion: settingsStr(settings, "codegen.schema_version") ?? "1.0",
+const emitBase = (settings: Record<string, string>) => ({
+  ds: datasource(settings),
+  naming: viewPaths(settings),
+  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
 const samplesForNative = (
@@ -103,10 +109,10 @@ const samplesForNative = (
   }
 };
 
-const dsType = (name: string, naming: ArtifactNaming): string =>
+const dsType = (name: string, naming: ArtifactPaths): string =>
   `Backend.Types.Datasource.${naming.className(name)}`;
 
-const viewType = (name: string, naming: ArtifactNaming): string =>
+const viewType = (name: string, naming: ArtifactPaths): string =>
   `Backend.Types.View.${naming.className(name)}`;
 
 const wrapValue = (
@@ -127,7 +133,7 @@ const renderDs = (name: string, opts: EmitOptions): string => {
   if (table === undefined) return `new ${cls}()`;
   return objectLiteral(
     cls,
-    tableFields(table.fields, opts.ds).map((f) => {
+    tableFields(table.fields, opts.ds.idType).map((f) => {
       const { sample } = samplesForNative(nativeFieldType(opts.ds, f), f.type);
       return { ident: opts.naming.fieldName(f.name), expr: sample };
     }),
@@ -145,7 +151,7 @@ const parentToks = (view: ShapedView, opts: EmitOptions): FieldTok[] => {
         ...view.enrichments.map((e) => e.fkColumn),
       ])
     : new Set<string>();
-  return tableFields(table.fields, opts.ds)
+  return tableFields(table.fields, opts.ds.idType)
     .filter((f) => !omit.has(f.name))
     .map((f) => {
       const native = nativeFieldType(opts.ds, f);
@@ -295,9 +301,9 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const base = emitBase(ctx.settings);
-  const views = await loadViewTypes(ctx.reader);
+  const views = await new SpecificationParser(ctx.reader).loadViewTypes();
   const tables = (await ctx.reader.exists(DATASOURCE_TYPES_YAML))
-    ? parseDatasourceTypes({
+    ? new SpecificationParser().parseDatasourceTypes({
         yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
         idType: base.ds.idType,
       })

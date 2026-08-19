@@ -1,33 +1,34 @@
-import { datasourceSettings } from "./common/datasource-settings.ts";
-import { commentStyle, type CommentStyle } from "./common/doc-comment.ts";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import {
-  csharpServiceNaming,
-  type ServiceNaming,
-} from "./common/naming.ts";
+  servicePaths,
+  type ServicePaths,
+} from "./common/paths.ts";
 import {
-  loadServices,
+  SpecificationParser,
   type CustomServiceEntry,
   type ServiceCandidate,
-} from "./common/parse-services.ts";
-import { settingsStr } from "./common/settings.ts";
+} from "./specification-parser.ts";
 import { customStubTmpl, genericTmpl } from "./resources/services.ts";
 
-type EmitOptions = {
-  naming: ServiceNaming;
-  style: CommentStyle;
+const docTokens = (settings: Record<string, string>) => {
+  const comments = settings["comments"];
+  return {
+    simpleDoc: comments !== "none" && comments !== "description",
+    descriptionDoc: comments === "description",
+  };
 };
 
-const emitOptions = (settings: SettingsDict): EmitOptions => ({
-  naming: csharpServiceNaming(settings),
-  style: commentStyle(settingsStr(settings, "comments")),
-});
+type EmitOptions = {
+  naming: ServicePaths;
+  simpleDoc: boolean;
+  descriptionDoc: boolean;
+};
 
-const docFlags = (style: CommentStyle) => ({
-  simpleDoc: style === "simple",
-  descriptionDoc: style === "description",
+const emitOptions = (settings: Record<string, string>): EmitOptions => ({
+  naming: servicePaths(settings),
+  ...docTokens(settings),
 });
 
 const renderGeneric = (
@@ -38,7 +39,8 @@ const renderGeneric = (
   return content(
     opts.naming.filePath(candidate.name),
     fill(genericTmpl, {
-      ...docFlags(opts.style),
+      simpleDoc: opts.simpleDoc,
+      descriptionDoc: opts.descriptionDoc,
       className,
       datasourceType: candidate.datasourceType ?? "standard",
     }),
@@ -54,7 +56,8 @@ const renderCustom = (
   return content(
     opts.naming.customStubPath(entry.name),
     fill(customStubTmpl, {
-      ...docFlags(opts.style),
+      simpleDoc: opts.simpleDoc,
+      descriptionDoc: opts.descriptionDoc,
       interfaceName,
       className,
     }),
@@ -65,9 +68,8 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const opts = emitOptions(ctx.settings);
-  const ds = datasourceSettings(ctx.settings);
-  const { generics, customs } = await loadServices(ctx.reader, {
-    idType: ds.idType,
+  const { generics, customs } = await new SpecificationParser(ctx.reader).loadServices({
+    idType: ctx.settings["datasource.id_type"] ?? "integer",
     serviceClassName: opts.naming.serviceClassName,
   });
   return [

@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { memoryReader } from "./common/deterministic-reader.ts";
-import { DATASOURCE_TYPES_YAML } from "./common/parse-datasource-types.ts";
-import type { GenerateEntry } from "./common/generate-entry.ts";
+import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
+import {
+  DATASOURCE_TYPES_YAML,
+} from "./specification-parser.ts";
+import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { generate } from "./generate-datasource-types-tests.ts";
 
 const FIXTURE_YAML = `types:
@@ -149,7 +151,7 @@ describe("generate datasource types tests", () => {
     );
     assert.match(
       user,
-      /RoleId = "00000000-0000-0000-0000-000000000000"/,
+      /RoleId = System\.Guid\.Parse\("00000000-0000-0000-0000-000000000000"\)/,
     );
   });
 
@@ -170,21 +172,5 @@ describe("generate datasource types tests", () => {
   it("writes codegen.schema_version into the file header", async () => {
     const user = await userBody({ "codegen.schema_version": "9.9" });
     assert.match(user, /schema-version: 9.9/);
-  });
-
-  it("fields casing changes getter and setter identifiers", async () => {
-    const camel = await userBody({
-      "languages.csharp.casing.fields": "camel",
-    });
-    assert.match(camel, /public void GetsnickName\(/);
-    assert.match(camel, /public void SetsnickName\(/);
-    assert.match(camel, /value\.nickName = next;/);
-  });
-
-  it("types casing changes the generated class name", async () => {
-    const user = await userBody({
-      "languages.csharp.casing.types": "camel",
-    });
-    assert.match(user, /private static user Sample\(\) => new user/);
   });
 });

@@ -1,26 +1,36 @@
 import { pascalCase } from "change-case";
+import { fill } from "@deterministic-code/generators-common/fill";
+import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
+import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  datasourceSettings,
-  nativeFieldType,
   tableFields,
-  type DatasourceSettings,
-} from "./common/datasource-settings.ts";
-import { fill } from "./common/fill.ts";
-import type { GenerateContext, SettingsDict } from "./common/generate-context.ts";
-import { content, type GenerateEntry } from "./common/generate-entry.ts";
-import { csharpNaming, type ArtifactNaming } from "./common/naming.ts";
-import {
+  SpecificationParser,
   DATASOURCE_TYPES_YAML,
-  parseDatasourceTypes,
   type DatasourceField,
   type DatasourceType,
-} from "./common/parse-datasource-types.ts";
-import { settingsStr } from "./common/settings.ts";
+} from "./specification-parser.ts";
+import { nativeFieldType } from "./common/type-converter.ts";
 import { typeTestTmpl } from "./resources/datasource-type-validators-tests.ts";
 
+type Datasource = {
+  idType: string;
+  datetimeRepr: string;
+  withUuidColumn: boolean;
+};
+
+const datasource = (settings: Record<string, string>): Datasource => {
+  const idType = settings["datasource.id_type"] ?? "integer";
+  return {
+    idType,
+    datetimeRepr: settings["datasource.datetime"] ?? "native",
+    withUuidColumn: idType !== "uuid",
+  };
+};
+
 type EmitOptions = {
-  ds: DatasourceSettings;
-  naming: ArtifactNaming;
+  ds: Datasource;
+  naming: ArtifactPaths;
   schemaVersion: string;
 };
 
@@ -37,10 +47,10 @@ type CaseTok = {
   assertion: string;
 };
 
-const emitOptions = (settings: SettingsDict): EmitOptions => ({
-  ds: datasourceSettings(settings),
-  naming: csharpNaming(settings),
-  schemaVersion: settingsStr(settings, "codegen.schema_version") ?? "1.0",
+const emitOptions = (settings: Record<string, string>): EmitOptions => ({
+  ds: datasource(settings),
+  naming: datasourcePaths(settings),
+  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
 const samplesForNative = (
@@ -178,7 +188,7 @@ const renderTests = (
   table: DatasourceType,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const fields = tableFields(table.fields, opts.ds).map((f) =>
+  const fields = tableFields(table.fields, opts.ds.idType).map((f) =>
     fieldTok(f, opts),
   );
   const declared = table.fields.map((f) => fieldTok(f, opts));
@@ -198,7 +208,7 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   const opts = emitOptions(ctx.settings);
-  const types = parseDatasourceTypes({
+  const types = new SpecificationParser().parseDatasourceTypes({
     yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
     idType: opts.ds.idType,
   });
