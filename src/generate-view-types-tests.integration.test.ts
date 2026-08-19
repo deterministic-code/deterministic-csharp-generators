@@ -268,12 +268,4 @@ types: []
     assert.match(card, /schema-version: 9.9/);
   });
 
-  it("maps datetime fields to strings when datasource.datetime=string", async () => {
-    const card = await bodyOf("CardPaymentTests.cs", {
-      "datasource.datetime": "string",
-    });
-    assert.match(card, /PaidAt = "2024-01-01T00:00:00.000Z"/);
-    assert.match(card, /var next = "2024-01-02T00:00:00.000Z";/);
-  });
-
 });

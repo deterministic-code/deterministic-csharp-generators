@@ -7,13 +7,12 @@ import {
   type ViewField,
   type ViewType,
 } from "./specification-parser.ts";
-import { convertSpecType } from "./common/type-converter.ts";
+import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/view-types-tests.ts";
 
 type EmitOptions = {
   naming: ArtifactPaths;
   schemaVersion: string;
-  datetimeRepr: string;
 };
 
 type FieldTok = {
@@ -26,7 +25,6 @@ type FieldTok = {
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
   naming: viewPaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
-  datetimeRepr: settings["datasource.datetime"] ?? "native",
 });
 
 const samplesForNative = (
@@ -69,14 +67,14 @@ const samplesForNative = (
 
 const listElemType = (field: ViewField, opts: EmitOptions): string =>
   field.kind === "primitive"
-    ? convertSpecType(field.base, opts.datetimeRepr)
+    ? convertSpecType(field.base)
     : opts.naming.className(field.base);
 
 const fieldTokens = (field: ViewField, opts: EmitOptions): FieldTok => {
   const ident = opts.naming.fieldName(field.name);
   if (field.kind === "primitive") {
     const pair = samplesForNative(
-      convertSpecType(field.base, opts.datetimeRepr),
+      convertSpecType(field.base),
       field.base,
     );
     const elem = listElemType(field, opts);

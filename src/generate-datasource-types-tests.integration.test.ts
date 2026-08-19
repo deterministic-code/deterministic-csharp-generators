@@ -139,7 +139,7 @@ describe("generate datasource types tests", () => {
     assert.match(user, /Balance = "0"/);
   });
 
-  it("drops the uuid column and uses Guid ids when datasource.id_type=uuid", async () => {
+  it("drops the uuid column and uses string ids when datasource.id_type=uuid", async () => {
     const user = await userBody({ "datasource.id_type": "uuid" });
     assert.match(user, /public void GetsId\(/);
     assert.match(user, /public void SetsId\(/);
@@ -147,11 +147,11 @@ describe("generate datasource types tests", () => {
     assert.doesNotMatch(user, /public void SetsUuid\(/);
     assert.match(
       user,
-      /var initial = System\.Guid\.Parse\("00000000-0000-0000-0000-000000000000"\);/,
+      /var initial = "00000000-0000-0000-0000-000000000000";/,
     );
     assert.match(
       user,
-      /RoleId = System\.Guid\.Parse\("00000000-0000-0000-0000-000000000000"\)/,
+      /RoleId = "00000000-0000-0000-0000-000000000000"/,
     );
   });
 
@@ -160,13 +160,6 @@ describe("generate datasource types tests", () => {
     assert.match(user, /Id = 1L,/);
     assert.match(user, /var next = 2L;/);
     assert.match(user, /private static User Sample\(\) => new User/);
-  });
-
-  it("maps datetime fields to strings when datasource.datetime=string", async () => {
-    const user = await userBody({ "datasource.datetime": "string" });
-    assert.match(user, /Created = "2024-01-01T00:00:00.000Z"/);
-    assert.match(user, /CreatedAt = "2024-01-01T00:00:00.000Z"/);
-    assert.match(user, /var next = "2024-01-02T00:00:00.000Z";/);
   });
 
   it("writes codegen.schema_version into the file header", async () => {

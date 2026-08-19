@@ -3,18 +3,18 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
+  inheritedIdType,
   SpecificationParser,
   DATASOURCE_TYPES_YAML,
   type DatasourceField,
   type DatasourceType,
 } from "./specification-parser.ts";
-import { convertSpecType, idTypeToNative } from "./common/type-converter.ts";
+import { convertSpecType } from "./base-type-converter.ts";
 import { isFiniteInt, isFiniteNumber } from "@deterministic-code/generators-common/yaml-entry";
 import { typeTmpl } from "./resources/datasource-type-validators.ts";
 
 type Datasource = {
   idType: string;
-  datetimeRepr: string;
   withUuidColumn: boolean;
 };
 
@@ -22,7 +22,6 @@ const datasource = (settings: Record<string, string>): Datasource => {
   const idType = settings["datasource.id_type"] ?? "integer";
   return {
     idType,
-    datetimeRepr: settings["datasource.datetime"] ?? "native",
     withUuidColumn: idType !== "uuid",
   };
 };
@@ -87,7 +86,7 @@ const numericLiteralForNative = (
 };
 
 const numericLiteral = (fieldType: string, value: number): string => {
-  const native = convertSpecType(fieldType, "native");
+  const native = convertSpecType(fieldType);
   return numericLiteralForNative(native, value) ?? String(value);
 };
 
@@ -174,7 +173,10 @@ const ruleLine = (field: FieldShape, opts: EmitOptions): string => {
 const standardRuleLine = (name: string, opts: EmitOptions): string => {
   const prop = opts.naming.fieldName(name);
   if (name === "id") {
-    const bound = numericLiteralForNative(idTypeToNative(opts.ds.idType), 0);
+    const bound = numericLiteralForNative(
+      convertSpecType(inheritedIdType(opts.ds.idType)),
+      0,
+    );
     const numeric = bound
       ? `\n            .GreaterThanOrEqualTo(${bound})`
       : "";

@@ -3,15 +3,15 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
+  inheritedIdType,
   SpecificationParser,
   type DatasourceType,
 } from "./specification-parser.ts";
-import { convertSpecType, idTypeToNative, nativeFieldType } from "./common/type-converter.ts";
+import { convertSpecType } from "./base-type-converter.ts";
 import { typeTmpl } from "./resources/datasource-types.ts";
 
 type Datasource = {
   idType: string;
-  datetimeRepr: string;
   withUuidColumn: boolean;
 };
 
@@ -19,7 +19,6 @@ const datasource = (settings: Record<string, string>): Datasource => {
   const idType = settings["datasource.id_type"] ?? "integer";
   return {
     idType,
-    datetimeRepr: settings["datasource.datetime"] ?? "native",
     withUuidColumn: idType !== "uuid",
   };
 };
@@ -55,23 +54,18 @@ const tableFields = (
   ds: Datasource,
 ): Array<{ name: string; type: string; isNullable: boolean }> =>
   [
-    { name: "id", type: ds.idType, isNullable: false },
+    { name: "id", type: inheritedIdType(ds.idType), isNullable: false },
     { name: "uuid", type: "uuid", isNullable: false },
     { name: "created", type: "datetime", isNullable: false },
     { name: "updated", type: "datetime", isNullable: false },
     ...table.fields,
   ].filter((f) => ds.withUuidColumn || f.name !== "uuid");
 
-const csTypeFor = (
-  field: {
-    name: string;
-    type: string;
-    isNullable: boolean;
-    references?: string;
-  },
-  ds: Datasource,
-): string => {
-  const t = nativeFieldType(ds, field);
+const csTypeFor = (field: {
+  type: string;
+  isNullable: boolean;
+}): string => {
+  const t = convertSpecType(field.type);
   return field.isNullable ? `${t}?` : t;
 };
 
@@ -81,7 +75,7 @@ const renderType = (
 ): GenerateEntry => {
   const { ds, naming, schemaVersion, simpleDoc, descriptionDoc } = opts;
   const fields = tableFields(table, ds);
-  const dt = convertSpecType("datetime", ds.datetimeRepr);
+  const dt = convertSpecType("datetime");
   const className = naming.className(table.name);
   return content(
     naming.filePath(table.name),
@@ -96,11 +90,11 @@ const renderType = (
         ? "StandardDataSourceWithUuid"
         : "StandardDataSource",
       typeArgs: ds.withUuidColumn
-        ? `${idTypeToNative(ds.idType)}, string, ${dt}`
-        : `${idTypeToNative(ds.idType)}, ${dt}`,
+        ? `${convertSpecType(inheritedIdType(ds.idType))}, string, ${dt}`
+        : `${convertSpecType(inheritedIdType(ds.idType))}, ${dt}`,
       fields: fields.map((f) => ({
         ident: naming.fieldName(f.name),
-        csType: csTypeFor(f, ds),
+        csType: csTypeFor(f),
       })),
     }),
   );

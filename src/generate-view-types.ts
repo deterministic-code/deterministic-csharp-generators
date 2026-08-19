@@ -11,12 +11,11 @@ import {
   type ViewField,
   type ViewType,
 } from "./specification-parser.ts";
-import { convertSpecType, nativeFieldType } from "./common/type-converter.ts";
+import { convertSpecType } from "./base-type-converter.ts";
 import { typeTmpl } from "./resources/view-types.ts";
 
 type Datasource = {
   idType: string;
-  datetimeRepr: string;
   withUuidColumn: boolean;
 };
 
@@ -24,7 +23,6 @@ const datasource = (settings: Record<string, string>): Datasource => {
   const idType = settings["datasource.id_type"] ?? "integer";
   return {
     idType,
-    datetimeRepr: settings["datasource.datetime"] ?? "native",
     withUuidColumn: idType !== "uuid",
   };
 };
@@ -60,7 +58,7 @@ const inlinesParent = (view: ShapedView): boolean =>
 const csTypeFor = (field: ViewField, opts: EmitOptions): string => {
   let base =
     field.kind === "primitive"
-      ? convertSpecType(field.base, opts.ds.datetimeRepr)
+      ? convertSpecType(field.base)
       : field.kind === "datasource"
         ? `Backend.Types.Datasource.${opts.naming.className(field.base)}`
         : opts.naming.className(field.base);
@@ -79,7 +77,7 @@ const parentFields = (view: ShapedView, opts: EmitOptions) => {
   return tableFields(table.fields, opts.ds.idType)
     .filter((f) => !omit.has(f.name))
     .map((f) => {
-      const native = nativeFieldType(opts.ds, f);
+      const native = convertSpecType(f.type);
       return {
         ident: opts.naming.fieldName(f.name),
         csType: f.isNullable ? `${native}?` : native,

@@ -104,14 +104,14 @@ describe("generate datasource type validators", () => {
       user,
       /public class DatasourceUserValidator : AbstractValidator<Backend\.Types\.Datasource\.User>/,
     );
-    assert.match(user, /RuleFor\(x => x\.Id\)\n\s+\.NotNull\(\)\n\s+\.GreaterThanOrEqualTo\(0\)/);
+    assert.match(user, /RuleFor\(x => x\.Id\)\n\s+\.NotNull\(\)\n\s+\.GreaterThanOrEqualTo\(0L\)/);
     assert.match(user, /RuleFor\(x => x\.Email\)[\s\S]*\.MinimumLength\(3\)[\s\S]*\.MaximumLength\(256\)/);
     assert.match(user, /RuleFor\(x => x\.RoleId\)[\s\S]*\.GreaterThanOrEqualTo\(0L\)/);
     assert.match(user, /RuleFor\(x => x\.NickName\);/);
     assert.match(user, /RuleFor\(x => x\.Score\)[\s\S]*\.GreaterThanOrEqualTo\(0\.0\)/);
   });
 
-  it("drops the uuid rule and uses Guid ids when datasource.id_type=uuid", async () => {
+  it("drops the uuid rule when datasource.id_type=uuid", async () => {
     const user = await userBody({ "datasource.id_type": "uuid" });
     assert.match(user, /RuleFor\(x => x\.Id\)\n\s+\.NotNull\(\);/);
     assert.doesNotMatch(user, /RuleFor\(x => x\.Uuid\)/);

@@ -10,12 +10,11 @@ import {
   type DatasourceField,
   type DatasourceType,
 } from "./specification-parser.ts";
-import { nativeFieldType } from "./common/type-converter.ts";
+import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/datasource-type-validators-tests.ts";
 
 type Datasource = {
   idType: string;
-  datetimeRepr: string;
   withUuidColumn: boolean;
 };
 
@@ -23,7 +22,6 @@ const datasource = (settings: Record<string, string>): Datasource => {
   const idType = settings["datasource.id_type"] ?? "integer";
   return {
     idType,
-    datetimeRepr: settings["datasource.datetime"] ?? "native",
     withUuidColumn: idType !== "uuid",
   };
 };
@@ -111,7 +109,7 @@ const fieldTok = (
   opts: EmitOptions,
 ): FieldTok => {
   const { sample } = samplesForNative(
-    nativeFieldType(opts.ds, field),
+    convertSpecType(field.type),
     field.type,
   );
   return {
