@@ -3,9 +3,9 @@ import { describe, it } from "node:test";
 import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
 import {
   DATASOURCE_TYPES_YAML,
-} from "./specification-parser.ts";
+} from "../src/specification-parser.ts";
 import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { generate } from "./generate-datasource-type-validators-tests.ts";
+import { generate } from "../src/generate-datasource-type-validators-tests.ts";
 
 const FIXTURE_YAML = `types:
   - user:

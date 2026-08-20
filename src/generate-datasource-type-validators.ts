@@ -13,21 +13,8 @@ import { convertSpecType } from "./base-type-converter.ts";
 import { isFiniteInt, isFiniteNumber } from "@deterministic-code/generators-common/yaml-entry";
 import { typeTmpl } from "./resources/datasource-type-validators.ts";
 
-type Datasource = {
-  idType: string;
-  withUuidColumn: boolean;
-};
-
-const datasource = (settings: Record<string, string>): Datasource => {
-  const idType = settings["datasource.id_type"] ?? "integer";
-  return {
-    idType,
-    withUuidColumn: idType !== "uuid",
-  };
-};
-
 type EmitOptions = {
-  ds: Datasource;
+  idType: string;
   naming: ArtifactPaths;
   schemaVersion: string;
   namespace: string;
@@ -54,7 +41,7 @@ const UUID_PATTERN =
   "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  ds: datasource(settings),
+  idType: settings["datasource.id_type"] ?? "integer",
   naming: datasourcePaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   namespace: "Backend.Validators.Datasource",
@@ -174,7 +161,7 @@ const standardRuleLine = (name: string, opts: EmitOptions): string => {
   const prop = opts.naming.fieldName(name);
   if (name === "id") {
     const bound = numericLiteralForNative(
-      convertSpecType(inheritedIdType(opts.ds.idType)),
+      convertSpecType(inheritedIdType(opts.idType)),
       0,
     );
     const numeric = bound
@@ -194,7 +181,7 @@ const standardRuleLines = (
   );
   return STANDARD_COLUMNS.filter(
     ({ name }) =>
-      (opts.ds.withUuidColumn || name !== "uuid") &&
+      (opts.idType !== "uuid" || name !== "uuid") &&
       !userFieldNames.has(opts.naming.fieldName(name)),
   ).map(({ name }) => standardRuleLine(name, opts));
 };
@@ -230,7 +217,7 @@ export const generate = async (
   const opts = emitOptions(ctx.settings);
   const types = new SpecificationParser().parseDatasourceTypes({
     yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
-    idType: opts.ds.idType,
+    idType: opts.idType,
   });
   return types.map((table) => renderValidator(table, opts));
 };

@@ -14,19 +14,6 @@ import {
 import { convertSpecType } from "./base-type-converter.ts";
 import { typeTmpl } from "./resources/view-types.ts";
 
-type Datasource = {
-  idType: string;
-  withUuidColumn: boolean;
-};
-
-const datasource = (settings: Record<string, string>): Datasource => {
-  const idType = settings["datasource.id_type"] ?? "integer";
-  return {
-    idType,
-    withUuidColumn: idType !== "uuid",
-  };
-};
-
 const docTokens = (settings: Record<string, string>) => {
   const comments = settings["comments"];
   return {
@@ -36,7 +23,7 @@ const docTokens = (settings: Record<string, string>) => {
 };
 
 type EmitOptions = {
-  ds: Datasource;
+  idType: string;
   naming: ArtifactPaths;
   schemaVersion: string;
   simpleDoc: boolean;
@@ -45,7 +32,7 @@ type EmitOptions = {
 };
 
 const emitBase = (settings: Record<string, string>) => ({
-  ds: datasource(settings),
+  idType: settings["datasource.id_type"] ?? "integer",
   naming: viewPaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   ...docTokens(settings),
@@ -74,7 +61,7 @@ const parentFields = (view: ShapedView, opts: EmitOptions) => {
     ...view.omit,
     ...view.enrichments.map((e) => e.fkColumn),
   ]);
-  return tableFields(table.fields, opts.ds.idType)
+  return tableFields(table.fields, opts.idType)
     .filter((f) => !omit.has(f.name))
     .map((f) => {
       const native = convertSpecType(f.type);
@@ -133,7 +120,7 @@ export const generate = async (
   const tables = (await ctx.reader.exists(DATASOURCE_TYPES_YAML))
     ? new SpecificationParser().parseDatasourceTypes({
         yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
-        idType: base.ds.idType,
+        idType: base.idType,
       })
     : [];
   const opts: EmitOptions = {

@@ -3,9 +3,9 @@ import { describe, it } from "node:test";
 import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
 import {
   DATASOURCE_TYPES_YAML,
-} from "./specification-parser.ts";
+} from "../src/specification-parser.ts";
 import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { generate } from "./generate-datasource-types.ts";
+import { generate } from "../src/generate-datasource-types.ts";
 
 const FIXTURE_YAML = `types:
   - user:
@@ -73,7 +73,7 @@ describe("generate", () => {
     assert.deepEqual([...byName.keys()].sort(), ["Role.cs", "User.cs"]);
   });
 
-  it("renders User against StandardDataSource with injected columns", async () => {
+  it("renders User against StandardDataSource", async () => {
     const byName = indexEntries(
       await generate({
         reader: fixtureReader(),
@@ -86,9 +86,8 @@ describe("generate", () => {
     assert.match(user, /namespace Backend\.Types\.Datasource;/);
     assert.match(
       user,
-      /public class User : StandardDataSourceWithUuid<long, string, System\.DateTime>/,
+      /public class User : StandardDataSource<long, System\.DateTime>/,
     );
-    assert.match(user, /public long Id \{ get; set; \}/);
     assert.match(user, /public string Email \{ get; set; \}/);
     assert.match(user, /public long RoleId \{ get; set; \}/);
   });
