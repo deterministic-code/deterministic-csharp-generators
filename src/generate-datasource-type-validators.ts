@@ -3,11 +3,10 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  inheritedIdType,
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
   type DatasourceField,
-  type DatasourceType,
+  type ExpandedDatasourceType,
   type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
@@ -15,7 +14,6 @@ import { isFiniteInt, isFiniteNumber } from "@deterministic-code/generators-comm
 import { typeTmpl } from "./resources/datasource-type-validators.ts";
 
 type EmitOptions = {
-  idType: string;
   naming: ArtifactPaths;
   schemaVersion: string;
   namespace: string;
@@ -37,7 +35,6 @@ const UUID_PATTERN =
   "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  idType: settings["datasource.id_type"] ?? "integer",
   naming: datasourcePaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   namespace: "Backend.Validators.Datasource",
@@ -153,11 +150,11 @@ const ruleLine = (field: FieldShape, opts: EmitOptions): string => {
   return `${head}\n${chain};`;
 };
 
-const standardRuleLine = (name: string, opts: EmitOptions): string => {
+const standardRuleLine = (name: string, opts: EmitOptions, idType: string): string => {
   const prop = opts.naming.fieldName(name);
   if (name === "id") {
     const bound = numericLiteralForNative(
-      convertSpecType(inheritedIdType(opts.idType)),
+      convertSpecType(idType),
       0,
     );
     const numeric = bound
@@ -172,13 +169,13 @@ const validatorPath = (entity: string, naming: ArtifactPaths): string =>
   `Datasource${naming.filePath(entity).replace(/\.cs$/, "")}Validator.cs`;
 
 const renderValidator = (
-  table: DatasourceType,
+  table: ExpandedDatasourceType,
   opts: EmitOptions,
 ): GenerateEntry => {
   const className = opts.naming.className(table.name);
   const rules = table.fields.map((field: DatasourceField) =>
     STANDARD_COLUMN_NAMES.has(field.name)
-      ? standardRuleLine(field.name, opts)
+      ? standardRuleLine(field.name, opts, field.type)
       : ruleLine(field, opts),
   );
   return content(
