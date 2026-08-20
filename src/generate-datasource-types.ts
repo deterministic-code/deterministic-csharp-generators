@@ -5,8 +5,7 @@ import { createCasing, type PackCasing } from "./common/default-casing.ts";
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
-  inheritedIdType,
-  type DatasourceType,
+  type ExpandedDatasourceType,
   type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
@@ -21,7 +20,6 @@ const docTokens = (settings: Record<string, string>) => {
 };
 
 type EmitOptions = {
-  idType: string;
   casing: PackCasing;
   schemaVersion: string;
   simpleDoc: boolean;
@@ -29,7 +27,6 @@ type EmitOptions = {
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  idType: settings["datasource.id_type"] ?? "integer",
   casing: createCasing(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   ...docTokens(settings),
@@ -44,11 +41,21 @@ const csTypeFor = (field: {
 };
 
 const renderType = (
-  table: DatasourceType,
+  table: ExpandedDatasourceType,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const { idType, casing, schemaVersion, simpleDoc, descriptionDoc } = opts;
-  const fields = table.fields;
+  const { casing, schemaVersion, simpleDoc, descriptionDoc } = opts;
+  const fields = table.fields.map((f) => ({
+    name: f.name,
+    ident: casing.convertFields(f.name),
+    csType: csTypeFor(f),
+    isPrimaryKey: f.isPrimaryKey === true,
+  }));
+  const idField =
+    fields.find((f) => f.isPrimaryKey) ?? fields.find((f) => f.name === "id");
+  const datetimeField =
+    fields.find((f) => f.name === "created") ??
+    fields.find((f) => f.name === "updated");
   const className = casing.convertTypes(table.name);
   return content(
     casing.filePath(table.name),
@@ -59,12 +66,9 @@ const renderType = (
       className,
       datasourceType: table.datasourceType,
       fieldCount: String(fields.length),
-      idType: convertSpecType(inheritedIdType(idType)),
-      datetimeType: convertSpecType("datetime"),
-      fields: fields.map((f) => ({
-        ident: casing.convertFields(f.name),
-        csType: csTypeFor(f),
-      })),
+      idType: idField?.csType,
+      datetimeType: datetimeField?.csType,
+      fields,
     }),
   );
 };
