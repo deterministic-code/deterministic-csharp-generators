@@ -15,21 +15,8 @@ import {
 import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/view-type-validators-tests.ts";
 
-type Datasource = {
-  idType: string;
-  withUuidColumn: boolean;
-};
-
-const datasource = (settings: Record<string, string>): Datasource => {
-  const idType = settings["datasource.id_type"] ?? "integer";
-  return {
-    idType,
-    withUuidColumn: idType !== "uuid",
-  };
-};
-
 type EmitOptions = {
-  ds: Datasource;
+  idType: string;
   naming: ArtifactPaths;
   schemaVersion: string;
   tables: Map<string, DatasourceType>;
@@ -49,7 +36,7 @@ type CaseTok = {
 };
 
 const emitBase = (settings: Record<string, string>) => ({
-  ds: datasource(settings),
+  idType: settings["datasource.id_type"] ?? "integer",
   naming: viewPaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
@@ -131,7 +118,7 @@ const renderDs = (name: string, opts: EmitOptions): string => {
   if (table === undefined) return `new ${cls}()`;
   return objectLiteral(
     cls,
-    tableFields(table.fields, opts.ds.idType).map((f) => {
+    tableFields(table.fields, opts.idType).map((f) => {
       const { sample } = samplesForNative(convertSpecType(f.type), f.type);
       return { ident: opts.naming.fieldName(f.name), expr: sample };
     }),
@@ -149,7 +136,7 @@ const parentToks = (view: ShapedView, opts: EmitOptions): FieldTok[] => {
         ...view.enrichments.map((e) => e.fkColumn),
       ])
     : new Set<string>();
-  return tableFields(table.fields, opts.ds.idType)
+  return tableFields(table.fields, opts.idType)
     .filter((f) => !omit.has(f.name))
     .map((f) => {
       const native = convertSpecType(f.type);
@@ -303,7 +290,7 @@ export const generate = async (
   const tables = (await ctx.reader.exists(DATASOURCE_TYPES_YAML))
     ? new SpecificationParser().parseDatasourceTypes({
         yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
-        idType: base.ds.idType,
+        idType: base.idType,
       })
     : [];
   const opts: EmitOptions = {

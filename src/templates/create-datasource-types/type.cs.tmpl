@@ -10,7 +10,7 @@ namespace Backend.Types.Datasource;
  * Target: StandardCrud.
  * Fields: {{fieldCount}}.
  */
-{{/descriptionDoc}}public class {{className}} : {{base}}<{{typeArgs}}>
+{{/descriptionDoc}}public class {{className}} : StandardDataSource<{{idType}}, {{datetimeType}}>
 {
 {{#fields}}
     public {{csType}} {{ident}} { get; set; }
