@@ -1,0 +1,101 @@
+import assert from "node:assert/strict";
+import { describe, it } from "node:test";
+import { memoryReader } from "@deterministic-code/generators-common/deterministic-reader";
+import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
+import { DATASOURCE_TYPES_YAML } from "../src/specification-parser.ts";
+import { generate } from "../src/generate-datasource-types.ts";
+
+const FIXTURE_YAML = `types:
+  - notification_type:
+      fields:
+        - channel_name:
+            type: string
+`;
+
+const fixtureReader = () =>
+  memoryReader({ [DATASOURCE_TYPES_YAML]: FIXTURE_YAML });
+
+const entryBody = (entry: GenerateEntry): string => {
+  if ("contents" in entry) return String(entry.contents);
+  return entry.content;
+};
+
+const byFilename = async (settings: Record<string, string>) => {
+  const map = new Map<string, string>();
+  for (const entry of await generate({
+    reader: fixtureReader(),
+    settings,
+  })) {
+    map.set(entry.filename, entryBody(entry));
+  }
+  return map;
+};
+
+describe("generate datasource types casing", () => {
+  it("Auto uses Camel files, Pascal types, Pascal fields", async () => {
+    const files = await byFilename({});
+    assert.deepEqual([...files.keys()], ["notificationType.cs"]);
+    const body = files.get("notificationType.cs")!;
+    assert.match(body, /public class NotificationType /);
+    assert.match(body, /public string ChannelName /);
+  });
+
+  it("Pascal file names", async () => {
+    const files = await byFilename({
+      "languages.csharp.casing.file_names": "Pascal",
+    });
+    assert.ok(files.has("NotificationType.cs"));
+  });
+
+  it("Snake file names", async () => {
+    const files = await byFilename({
+      "languages.csharp.casing.file_names": "Snake",
+    });
+    assert.ok(files.has("notification_type.cs"));
+  });
+
+  it("Kebab file names", async () => {
+    const files = await byFilename({
+      "languages.csharp.casing.file_names": "Kebab",
+    });
+    assert.ok(files.has("notification-type.cs"));
+  });
+
+  it("Camel fields", async () => {
+    const files = await byFilename({
+      "languages.csharp.casing.fields": "Camel",
+    });
+    assert.match(files.get("notificationType.cs")!, /public string channelName /);
+  });
+
+  it("Snake fields", async () => {
+    const files = await byFilename({
+      "languages.csharp.casing.fields": "Snake",
+    });
+    assert.match(
+      files.get("notificationType.cs")!,
+      /public string channel_name /,
+    );
+  });
+
+  it("Camel types", async () => {
+    const files = await byFilename({
+      "languages.csharp.casing.types": "Camel",
+    });
+    assert.match(
+      files.get("notificationType.cs")!,
+      /public class notificationType /,
+    );
+  });
+
+  it("Kebab directories with Pascal files under by-feature", async () => {
+    const files = await byFilename({
+      "other.organize_by_feature": "true",
+      "languages.csharp.casing.file_names": "Pascal",
+      "languages.csharp.casing.directories": "Kebab",
+    });
+    assert.ok(
+      files.has("Features/notification-type/NotificationType.cs"),
+    );
+  });
+});

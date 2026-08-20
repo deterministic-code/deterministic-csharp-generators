@@ -248,7 +248,7 @@ types: []
     const summary = await bodyOf("UserSummaryTests.cs");
     assert.match(summary, /public void GetsDisplayName\(/);
     assert.match(summary, /public void GetsRoleName\(/);
-    assert.doesNotMatch(summary, /public void GetsEmail\(/);
+    assert.match(summary, /public void GetsEmail\(/);
     const empty = await bodyOf("EmptyViewTests.cs");
     assert.match(empty, /private static EmptyView Sample\(\) => new EmptyView/);
     assert.doesNotMatch(empty, /public void Gets/);

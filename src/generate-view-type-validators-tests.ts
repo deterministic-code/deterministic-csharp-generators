@@ -4,19 +4,18 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  tableFields,
-  SpecificationParser,
-  DATASOURCE_TYPES_YAML,
+  DeterministicParser,
+  VIEW_TYPES_YAML,
   type DatasourceType,
   type ShapedView,
   type ViewField,
   type ViewType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/view-type-validators-tests.ts";
 
 type EmitOptions = {
-  idType: string;
   naming: ArtifactPaths;
   schemaVersion: string;
   tables: Map<string, DatasourceType>;
@@ -36,7 +35,6 @@ type CaseTok = {
 };
 
 const emitBase = (settings: Record<string, string>) => ({
-  idType: settings["datasource.id_type"] ?? "integer",
   naming: viewPaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
@@ -118,35 +116,11 @@ const renderDs = (name: string, opts: EmitOptions): string => {
   if (table === undefined) return `new ${cls}()`;
   return objectLiteral(
     cls,
-    tableFields(table.fields, opts.idType).map((f) => {
+    table.fields.map((f) => {
       const { sample } = samplesForNative(convertSpecType(f.type), f.type);
       return { ident: opts.naming.fieldName(f.name), expr: sample };
     }),
   );
-};
-
-const parentToks = (view: ShapedView, opts: EmitOptions): FieldTok[] => {
-  if (view.inherits === null) return [];
-  const table = opts.tables.get(view.inherits);
-  if (table === undefined) return [];
-  const inline = view.enrichments.length > 0 || view.omit.length > 0;
-  const omit = inline
-    ? new Set([
-        ...view.omit,
-        ...view.enrichments.map((e) => e.fkColumn),
-      ])
-    : new Set<string>();
-  return tableFields(table.fields, opts.idType)
-    .filter((f) => !omit.has(f.name))
-    .map((f) => {
-      const native = convertSpecType(f.type);
-      const { sample } = samplesForNative(native, f.type);
-      return {
-        ident: opts.naming.fieldName(f.name),
-        sampleExpr: sample,
-        nullable: f.isNullable,
-      };
-    });
 };
 
 const viewFieldTok = (
@@ -179,11 +153,7 @@ const shapedToks = (
   view: ShapedView,
   opts: EmitOptions,
   visited: Set<string>,
-): FieldTok[] => {
-  const declared = view.fields.map((f) => viewFieldTok(f, opts, visited));
-  if (view.inherits === null) return declared;
-  return [...parentToks(view, opts), ...declared];
-};
+): FieldTok[] => view.fields.map((f) => viewFieldTok(f, opts, visited));
 
 const viewFixture = (
   name: string,
@@ -282,21 +252,27 @@ const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
   );
 };
 
-export const generate = async (
-  ctx: GenerateContext,
-): Promise<GenerateEntry[]> => {
-  const base = emitBase(ctx.settings);
-  const views = await new SpecificationParser(ctx.reader).loadViewTypes();
-  const tables = (await ctx.reader.exists(DATASOURCE_TYPES_YAML))
-    ? new SpecificationParser().parseDatasourceTypes({
-        yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
-        idType: base.idType,
-      })
-    : [];
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const views = deterministic.expandedViewTypes;
   const opts: EmitOptions = {
-    ...base,
-    tables: new Map(tables.map((t) => [t.name, t])),
+    ...emitBase(settings),
+    tables: new Map(
+      deterministic.expandedDatasourceTypes.map((t) => [t.name, t]),
+    ),
     views: new Map(views.map((v) => [v.name, v])),
   };
   return views.map((view) => renderTests(view, opts));
+};
+
+export const generate = async (
+  ctx: GenerateContext,
+): Promise<GenerateEntry[]> => {
+  await ctx.reader.read(VIEW_TYPES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
+  );
 };

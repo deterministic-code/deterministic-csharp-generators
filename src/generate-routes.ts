@@ -6,9 +6,12 @@ import {
   type RoutePaths,
 } from "./common/paths.ts";
 import {
-  SpecificationParser,
+  DeterministicParser,
+  ROUTES_YAML,
   type CustomRouteEntry,
   type RouteCandidate,
+  type ViewType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import {
   customStubTmpl,
@@ -83,11 +86,10 @@ const renderEnrichment = (
 };
 
 /** Unique enrichment targets from shaped views (auto-enrich), deduped by table. */
-const enrichmentTargets = async (
-  reader: GenerateContext["reader"],
+const enrichmentTargets = (
+  views: ViewType[],
   survivorNames: Set<string>,
-): Promise<string[]> => {
-  const views = await new SpecificationParser(reader).loadViewTypes();
+): string[] => {
   const seen = new Set<string>();
   const out: string[] = [];
   for (const view of views) {
@@ -102,18 +104,27 @@ const enrichmentTargets = async (
   return out;
 };
 
-export const generate = async (
-  ctx: GenerateContext,
-): Promise<GenerateEntry[]> => {
-  const opts = emitOptions(ctx.settings);
-  const { candidates, customs } = await new SpecificationParser(ctx.reader).loadRoutes({
-    idType: ctx.settings["datasource.id_type"] ?? "integer",
-  });
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const opts = emitOptions(settings);
+  const { candidates, customs } = deterministic.routes;
   const survivorNames = new Set(candidates.map((c) => c.name));
-  const targets = await enrichmentTargets(ctx.reader, survivorNames);
+  const targets = enrichmentTargets(deterministic.viewTypes, survivorNames);
   return [
     ...candidates.map((c) => renderRouter(c, opts)),
     ...customs.map((c) => renderCustom(c, opts)),
     ...targets.map((t) => renderEnrichment(t, opts)),
   ];
+};
+
+export const generate = async (
+  ctx: GenerateContext,
+): Promise<GenerateEntry[]> => {
+  await ctx.reader.read(ROUTES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
+  );
 };

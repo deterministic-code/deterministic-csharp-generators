@@ -3,11 +3,13 @@ import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
+import { emitViewFields, inlinesParent } from "./common/view-shape.ts";
 import {
-  SpecificationParser,
-  type ShapedView,
+  DeterministicParser,
+  VIEW_TYPES_YAML,
   type ViewField,
   type ViewType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import { typeTmpl } from "./resources/view-type-validators.ts";
 
@@ -48,14 +50,14 @@ const ruleLine = (field: ViewField, opts: EmitOptions): string => {
   return `        RuleFor(x => x.${prop})${notNull}\n            .SetValidator(new ${nestedValidator(field, opts.naming)}());`;
 };
 
-const inlinesParent = (view: ShapedView): boolean =>
-  view.inherits !== null &&
-  (view.enrichments.length > 0 || view.omit.length > 0);
-
 const validatorPath = (entity: string, naming: ArtifactPaths): string =>
   naming.filePath(entity).replace(/\.cs$/, "Validator.cs");
 
-const renderView = (view: ViewType, opts: EmitOptions): GenerateEntry => {
+const renderView = (
+  view: ViewType,
+  expanded: ViewType | undefined,
+  opts: EmitOptions,
+): GenerateEntry => {
   const className = opts.naming.className(view.name);
   const validatorClass = viewValidator(view.name, opts.naming);
   if (view.kind === "union") {
@@ -82,9 +84,10 @@ const renderView = (view: ViewType, opts: EmitOptions): GenerateEntry => {
     view.inherits && !inlinesParent(view)
       ? `        Include(new ${datasourceValidator(view.inherits, opts.naming)}());`
       : null;
-  const rules = [include, ...view.fields.map((f) => ruleLine(f, opts))].filter(
-    (x): x is string => x !== null && x !== "",
-  );
+  const rules = [
+    include,
+    ...emitViewFields(view, expanded).map((f) => ruleLine(f, opts)),
+  ].filter((x): x is string => x !== null && x !== "");
   return content(
     validatorPath(view.name, opts.naming),
     fill(typeTmpl, {
@@ -99,10 +102,25 @@ const renderView = (view: ViewType, opts: EmitOptions): GenerateEntry => {
   );
 };
 
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const opts = emitOptions(settings);
+  const expandedByName = new Map(
+    deterministic.expandedViewTypes.map((v) => [v.name, v]),
+  );
+  return deterministic.viewTypes.map((view) =>
+    renderView(view, expandedByName.get(view.name), opts),
+  );
+};
+
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  const opts = emitOptions(ctx.settings);
-  const views = await new SpecificationParser(ctx.reader).loadViewTypes();
-  return views.map((view) => renderView(view, opts));
+  await ctx.reader.read(VIEW_TYPES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
+  );
 };

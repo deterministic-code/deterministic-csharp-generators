@@ -70,7 +70,7 @@ describe("generate", () => {
         settings: { application_name: "catalog-api" },
       }),
     );
-    assert.deepEqual([...byName.keys()].sort(), ["Role.cs", "User.cs"]);
+    assert.deepEqual([...byName.keys()].sort(), ["role.cs", "user.cs"]);
   });
 
   it("renders User against StandardDataSource", async () => {
@@ -80,7 +80,7 @@ describe("generate", () => {
         settings: { application_name: "catalog-api" },
       }),
     );
-    const user = entryBody(requireEntry(byName, "User.cs"));
+    const user = entryBody(requireEntry(byName, "user.cs"));
     assert.match(user, /schema-version: 1\.0/);
     assert.match(user, /using Deterministic\.Types;/);
     assert.match(user, /namespace Backend\.Types\.Datasource;/);
@@ -88,6 +88,10 @@ describe("generate", () => {
       user,
       /public class User : StandardDataSource<long, System\.DateTime>/,
     );
+    assert.match(user, /public long Id \{ get; set; \}/);
+    assert.match(user, /public string Uuid \{ get; set; \}/);
+    assert.match(user, /public System.DateTime Created \{ get; set; \}/);
+    assert.match(user, /public System.DateTime Updated \{ get; set; \}/);
     assert.match(user, /public string Email \{ get; set; \}/);
     assert.match(user, /public long RoleId \{ get; set; \}/);
   });
