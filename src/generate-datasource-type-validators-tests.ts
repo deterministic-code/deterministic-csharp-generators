@@ -4,17 +4,16 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  tableFields,
-  SpecificationParser,
+  DeterministicParser,
   DATASOURCE_TYPES_YAML,
   type DatasourceField,
   type DatasourceType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/datasource-type-validators-tests.ts";
 
 type EmitOptions = {
-  idType: string;
   naming: ArtifactPaths;
   schemaVersion: string;
 };
@@ -33,7 +32,6 @@ type CaseTok = {
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  idType: settings["datasource.id_type"] ?? "integer",
   naming: datasourcePaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
@@ -113,11 +111,7 @@ const objectLiteral = (
 ): string =>
   `new ${cls} { ${fields.map((f) => `${f.ident} = ${f.expr}`).join(", ")} }`;
 
-const casesFor = (
-  cls: string,
-  fields: FieldTok[],
-  declared: FieldTok[],
-): CaseTok[] => {
+const casesFor = (cls: string, fields: FieldTok[]): CaseTok[] => {
   const valid = objectLiteral(
     cls,
     fields.map((f) => ({ ident: f.ident, expr: f.sampleExpr })),
@@ -125,7 +119,7 @@ const casesFor = (
   const cases: CaseTok[] = [
     { ident: "ParsesAValidPayload", fixture: valid, assertion: "True" },
   ];
-  if (declared.some((f) => f.isNullable)) {
+  if (fields.some((f) => f.isNullable)) {
     cases.push({
       ident: "AcceptsNullForNullableFields",
       fixture: objectLiteral(
@@ -138,7 +132,7 @@ const casesFor = (
       assertion: "True",
     });
   }
-  for (const field of declared) {
+  for (const field of fields) {
     if (!field.isNullable && field.type === "string") {
       cases.push({
         ident: `RejectsNullFor${pascalCase(field.ident)}`,
@@ -173,10 +167,7 @@ const renderTests = (
   table: DatasourceType,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const fields = tableFields(table.fields, opts.idType).map((f) =>
-    fieldTok(f, opts),
-  );
-  const declared = table.fields.map((f) => fieldTok(f, opts));
+  const fields = table.fields.map((f) => fieldTok(f, opts));
   const className = opts.naming.className(table.name);
   return content(
     opts.naming.filePath(table.name).replace(/\.cs$/, "ValidatorTests.cs"),
@@ -184,18 +175,27 @@ const renderTests = (
       schemaVersion: opts.schemaVersion,
       className,
       validatorClass: `Datasource${className}Validator`,
-      cases: casesFor(className, fields, declared),
+      cases: casesFor(className, fields),
     }),
+  );
+};
+
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const opts = emitOptions(settings);
+  return deterministic.expandedDatasourceTypes.map((table) =>
+    renderTests(table, opts),
   );
 };
 
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  const opts = emitOptions(ctx.settings);
-  const types = new SpecificationParser().parseDatasourceTypes({
-    yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
-    idType: opts.idType,
-  });
-  return types.map((table) => renderTests(table, opts));
+  await ctx.reader.read(DATASOURCE_TYPES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
+  );
 };

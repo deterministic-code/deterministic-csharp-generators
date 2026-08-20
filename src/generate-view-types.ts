@@ -2,14 +2,13 @@ import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
+import { emitViewFields, inlinesParent } from "./common/view-shape.ts";
 import {
-  tableFields,
-  SpecificationParser,
-  DATASOURCE_TYPES_YAML,
-  type DatasourceType,
-  type ShapedView,
+  DeterministicParser,
+  VIEW_TYPES_YAML,
   type ViewField,
   type ViewType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
 import { typeTmpl } from "./resources/view-types.ts";
@@ -23,24 +22,17 @@ const docTokens = (settings: Record<string, string>) => {
 };
 
 type EmitOptions = {
-  idType: string;
   naming: ArtifactPaths;
   schemaVersion: string;
   simpleDoc: boolean;
   descriptionDoc: boolean;
-  tables: Map<string, DatasourceType>;
 };
 
-const emitBase = (settings: Record<string, string>) => ({
-  idType: settings["datasource.id_type"] ?? "integer",
+const emitOptions = (settings: Record<string, string>): EmitOptions => ({
   naming: viewPaths(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   ...docTokens(settings),
 });
-
-const inlinesParent = (view: ShapedView): boolean =>
-  view.inherits !== null &&
-  (view.enrichments.length > 0 || view.omit.length > 0);
 
 const csTypeFor = (field: ViewField, opts: EmitOptions): string => {
   let base =
@@ -53,38 +45,19 @@ const csTypeFor = (field: ViewField, opts: EmitOptions): string => {
   return field.isNullable ? `${base}?` : base;
 };
 
-const parentFields = (view: ShapedView, opts: EmitOptions) => {
-  if (view.inherits === null) return [];
-  const table = opts.tables.get(view.inherits);
-  if (table === undefined) return [];
-  const omit = new Set([
-    ...view.omit,
-    ...view.enrichments.map((e) => e.fkColumn),
-  ]);
-  return tableFields(table.fields, opts.idType)
-    .filter((f) => !omit.has(f.name))
-    .map((f) => {
-      const native = convertSpecType(f.type);
-      return {
-        ident: opts.naming.fieldName(f.name),
-        csType: f.isNullable ? `${native}?` : native,
-      };
-    });
-};
-
-const classFields = (view: ShapedView, opts: EmitOptions) => {
-  const declared = view.fields.map((f) => ({
-    ident: opts.naming.fieldName(f.name),
-    csType: csTypeFor(f, opts),
-  }));
-  if (view.inherits === null || !inlinesParent(view)) return declared;
-  return [...parentFields(view, opts), ...declared];
-};
-
-const renderView = (view: ViewType, opts: EmitOptions): GenerateEntry => {
+const renderView = (
+  view: ViewType,
+  expanded: ViewType | undefined,
+  opts: EmitOptions,
+): GenerateEntry => {
   const className = opts.naming.className(view.name);
   const isUnion = view.kind === "union";
-  const fields = isUnion ? [] : classFields(view, opts);
+  const fields = isUnion
+    ? []
+    : emitViewFields(view, expanded).map((f) => ({
+        ident: opts.naming.fieldName(f.name),
+        csType: csTypeFor(f, opts),
+      }));
   const hasExtends =
     !isUnion && view.inherits !== null && !inlinesParent(view);
   const needsList =
@@ -112,20 +85,25 @@ const renderView = (view: ViewType, opts: EmitOptions): GenerateEntry => {
   );
 };
 
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const opts = emitOptions(settings);
+  const expandedByName = new Map(
+    deterministic.expandedViewTypes.map((v) => [v.name, v]),
+  );
+  return deterministic.viewTypes.map((view) =>
+    renderView(view, expandedByName.get(view.name), opts),
+  );
+};
+
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  const base = emitBase(ctx.settings);
-  const views = await new SpecificationParser(ctx.reader).loadViewTypes();
-  const tables = (await ctx.reader.exists(DATASOURCE_TYPES_YAML))
-    ? new SpecificationParser().parseDatasourceTypes({
-        yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
-        idType: base.idType,
-      })
-    : [];
-  const opts: EmitOptions = {
-    ...base,
-    tables: new Map(tables.map((t) => [t.name, t])),
-  };
-  return views.map((view) => renderView(view, opts));
+  await ctx.reader.read(VIEW_TYPES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
+  );
 };

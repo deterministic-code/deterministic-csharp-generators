@@ -1,12 +1,13 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
+import { createCasing, type PackCasing } from "./common/default-casing.ts";
 import {
-  declaredFields,
+  DeterministicParser,
+  DATASOURCE_TYPES_YAML,
   inheritedIdType,
-  SpecificationParser,
   type DatasourceType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
 import { typeTmpl } from "./resources/datasource-types.ts";
@@ -21,7 +22,7 @@ const docTokens = (settings: Record<string, string>) => {
 
 type EmitOptions = {
   idType: string;
-  naming: ArtifactPaths;
+  casing: PackCasing;
   schemaVersion: string;
   simpleDoc: boolean;
   descriptionDoc: boolean;
@@ -29,7 +30,7 @@ type EmitOptions = {
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
   idType: settings["datasource.id_type"] ?? "integer",
-  naming: datasourcePaths(settings),
+  casing: createCasing(settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   ...docTokens(settings),
 });
@@ -46,11 +47,11 @@ const renderType = (
   table: DatasourceType,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const { idType, naming, schemaVersion, simpleDoc, descriptionDoc } = opts;
-  const fields = declaredFields(table.fields, idType);
-  const className = naming.className(table.name);
+  const { idType, casing, schemaVersion, simpleDoc, descriptionDoc } = opts;
+  const fields = table.fields;
+  const className = casing.convertTypes(table.name);
   return content(
-    naming.filePath(table.name),
+    casing.filePath(table.name),
     fill(typeTmpl, {
       schemaVersion,
       simpleDoc,
@@ -61,19 +62,29 @@ const renderType = (
       idType: convertSpecType(inheritedIdType(idType)),
       datetimeType: convertSpecType("datetime"),
       fields: fields.map((f) => ({
-        ident: naming.fieldName(f.name),
+        ident: casing.convertFields(f.name),
         csType: csTypeFor(f),
       })),
     }),
   );
 };
 
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const opts = emitOptions(settings);
+  return deterministic.expandedDatasourceTypes.map((table) =>
+    renderType(table, opts),
+  );
+};
+
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  const opts = emitOptions(ctx.settings);
-  const types = await new SpecificationParser(ctx.reader).loadDatasourceTypes(
-    opts.idType,
+  await ctx.reader.read(DATASOURCE_TYPES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
   );
-  return types.map((table) => renderType(table, opts));
 };

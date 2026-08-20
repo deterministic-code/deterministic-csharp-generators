@@ -3,9 +3,11 @@ import type { GenerateContext } from "@deterministic-code/generators-common/gene
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
 import {
-  SpecificationParser,
+  DeterministicParser,
+  VIEW_TYPES_YAML,
   type ViewField,
   type ViewType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/view-types-tests.ts";
@@ -127,10 +129,20 @@ const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
   );
 };
 
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const opts = emitOptions(settings);
+  return deterministic.expandedViewTypes.map((view) => renderTests(view, opts));
+};
+
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  const opts = emitOptions(ctx.settings);
-  const views = await new SpecificationParser(ctx.reader).loadViewTypes();
-  return views.map((view) => renderTests(view, opts));
+  await ctx.reader.read(VIEW_TYPES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
+  );
 };

@@ -4,10 +4,11 @@ import { content, type GenerateEntry } from "@deterministic-code/generators-comm
 import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
 import {
   inheritedIdType,
-  SpecificationParser,
+  DeterministicParser,
   DATASOURCE_TYPES_YAML,
   type DatasourceField,
   type DatasourceType,
+  type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
 import { isFiniteInt, isFiniteNumber } from "@deterministic-code/generators-common/yaml-entry";
@@ -30,12 +31,7 @@ type FieldShape = {
   size?: number;
 };
 
-const STANDARD_COLUMNS: ReadonlyArray<FieldShape> = [
-  { name: "id", type: "number", isNullable: false },
-  { name: "uuid", type: "string", isNullable: false },
-  { name: "created", type: "datetime", isNullable: false },
-  { name: "updated", type: "datetime", isNullable: false },
-];
+const STANDARD_COLUMN_NAMES = new Set(["id", "uuid", "created", "updated"]);
 
 const UUID_PATTERN =
   "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
@@ -172,20 +168,6 @@ const standardRuleLine = (name: string, opts: EmitOptions): string => {
   return `        RuleFor(x => x.${prop})\n            .NotNull();`;
 };
 
-const standardRuleLines = (
-  table: DatasourceType,
-  opts: EmitOptions,
-): string[] => {
-  const userFieldNames = new Set(
-    table.fields.map((f) => opts.naming.fieldName(f.name)),
-  );
-  return STANDARD_COLUMNS.filter(
-    ({ name }) =>
-      (opts.idType !== "uuid" || name !== "uuid") &&
-      !userFieldNames.has(opts.naming.fieldName(name)),
-  ).map(({ name }) => standardRuleLine(name, opts));
-};
-
 const validatorPath = (entity: string, naming: ArtifactPaths): string =>
   `Datasource${naming.filePath(entity).replace(/\.cs$/, "")}Validator.cs`;
 
@@ -194,10 +176,11 @@ const renderValidator = (
   opts: EmitOptions,
 ): GenerateEntry => {
   const className = opts.naming.className(table.name);
-  const rules = [
-    ...standardRuleLines(table, opts),
-    ...table.fields.map((field: DatasourceField) => ruleLine(field, opts)),
-  ];
+  const rules = table.fields.map((field: DatasourceField) =>
+    STANDARD_COLUMN_NAMES.has(field.name)
+      ? standardRuleLine(field.name, opts)
+      : ruleLine(field, opts),
+  );
   return content(
     validatorPath(table.name, opts.naming),
     fill(typeTmpl, {
@@ -211,13 +194,22 @@ const renderValidator = (
   );
 };
 
+const generateFrom = (
+  deterministic: IDeterministic,
+  settings: Record<string, string>,
+): GenerateEntry[] => {
+  const opts = emitOptions(settings);
+  return deterministic.expandedDatasourceTypes.map((table) =>
+    renderValidator(table, opts),
+  );
+};
+
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
-  const opts = emitOptions(ctx.settings);
-  const types = new SpecificationParser().parseDatasourceTypes({
-    yaml: await ctx.reader.read(DATASOURCE_TYPES_YAML),
-    idType: opts.idType,
-  });
-  return types.map((table) => renderValidator(table, opts));
+  await ctx.reader.read(DATASOURCE_TYPES_YAML);
+  return generateFrom(
+    await DeterministicParser(ctx.reader).parse(ctx.settings),
+    ctx.settings,
+  );
 };
