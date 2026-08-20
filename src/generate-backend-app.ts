@@ -47,6 +47,6 @@ export const generate = async (
     patch(".env", envFile),
     patch(".env.example", envFile),
     patch(".gitignore", gitignore),
-    patch(".dockerignore", "bin/\nobj/", "DOCKERIGNORE_CSHARP"),
+    patch(".dockerignore", "bin/\nobj/"),
   ];
 };

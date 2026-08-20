@@ -4,9 +4,9 @@ import { memoryReader } from "@deterministic-code/generators-common/deterministi
 import {
   DATASOURCE_TYPES_YAML,
   VIEW_TYPES_YAML,
-} from "./specification-parser.ts";
+} from "../src/specification-parser.ts";
 import type { GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { generate } from "./generate-view-types.ts";
+import { generate } from "../src/generate-view-type-validators.ts";
 
 const DS_YAML = `types:
   - user:
@@ -17,14 +17,6 @@ const DS_YAML = `types:
         - role_id:
             type: number
             references: role.id
-        - nick_name:
-            type: string
-            is_nullable: true
-  - role:
-      datasource_type: readonly-lookup
-      fields:
-        - name:
-            type: string
   - tag:
       fields:
         - label:
@@ -36,13 +28,6 @@ const VIEW_YAML = `includes:
       include: "*"
       auto_enrich: true
 types:
-  - user_summary:
-      inherits: datasource_types.user
-      omit:
-        - nick_name
-      fields:
-        - display_name:
-            type: string
   - payment:
       one_of:
         - card_payment
@@ -53,8 +38,8 @@ types:
             type: decimal
         - tags:
             type: datasource_types.tag[]
-        - note:
-            type: string
+        - owner:
+            type: user
             is_nullable: true
   - cash_payment:
       fields:
@@ -97,13 +82,10 @@ const requireEntry = (
   return entry;
 };
 
-describe("generate view types", () => {
-  const bodyOf = async (
-    suffix: string,
-    settings: Record<string, string> = {},
-  ) => {
+describe("generate view type validators", () => {
+  const bodyOf = async (suffix: string) => {
     const map = indexEntries(
-      await generate({ reader: fixtureReader(), settings }),
+      await generate({ reader: fixtureReader(), settings: {} }),
     );
     const file = [...map.keys()].find((name) => name.endsWith(suffix));
     assert.ok(file, `missing ${suffix} generate entry`);
@@ -117,33 +99,26 @@ describe("generate view types", () => {
     );
   });
 
-  it("renders a shaped view, a union interface, and an inlined inherit", async () => {
-    const card = await bodyOf("CardPayment.cs");
-    assert.match(card, /namespace Backend\.Types\.View;/);
-    assert.match(card, /public class CardPayment/);
-    assert.match(card, /public string Amount \{ get; set; \}/);
+  it("validates nested fields and union members", async () => {
+    const card = await bodyOf("CardPaymentValidator.cs");
     assert.match(
       card,
-      /public List<Backend\.Types\.Datasource\.Tag> Tags \{ get; set; \}/,
+      /public class CardPaymentValidator : AbstractValidator<Backend\.Types\.View\.CardPayment>/,
     );
-    assert.match(card, /public string\? Note \{ get; set; \}/);
-    assert.match(card, /using System\.Collections\.Generic;/);
-    const payment = await bodyOf("Payment.cs");
-    assert.match(payment, /public interface Payment \{\}/);
-    const summary = await bodyOf("UserSummary.cs");
-    assert.match(summary, /public class UserSummary/);
-    assert.doesNotMatch(summary, /: Backend\.Types\.Datasource\.User/);
-    assert.match(summary, /public string DisplayName \{ get; set; \}/);
-    assert.match(summary, /public string Email \{ get; set; \}/);
-    assert.doesNotMatch(summary, /NickName/);
-    assert.doesNotMatch(summary, /RoleId/);
-  });
-
-  it("extends the datasource type when inherit is a pass-through", async () => {
-    const role = await bodyOf("Role.cs");
+    assert.match(card, /RuleFor\(x => x\.Amount\)\n\s+\.NotNull\(\);/);
     assert.match(
-      role,
-      /public class Role : Backend\.Types\.Datasource\.Role/,
+      card,
+      /ForEach\(x => x\.SetValidator\(new DatasourceTagValidator\(\)\)\)/,
+    );
+    assert.match(
+      card,
+      /RuleFor\(x => x\.Owner\)\n\s+\.SetValidator\(new UserValidator\(\)\)/,
+    );
+    const payment = await bodyOf("PaymentValidator.cs");
+    assert.match(payment, /public void ValidateAndThrow\(object obj\)/);
+    assert.match(
+      payment,
+      /if \(obj is Backend\.Types\.View\.CardPayment asCardPayment\)/,
     );
   });
 });
