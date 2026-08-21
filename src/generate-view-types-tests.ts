@@ -17,6 +17,9 @@ type FieldTok = {
   sampleExpr: string;
   nextExpr: string;
   nullable: boolean;
+  getsTest: string;
+  setsTest: string;
+  allowsNullTest: string;
 };
 
 const samplesForNative = (
@@ -86,6 +89,9 @@ const fieldTokens = (
         ? `new List<${elem}> { ${pair.next} }`
         : pair.next,
       nullable: field.isNullable,
+      getsTest: convertTypes(`gets_${field.name}`),
+      setsTest: convertTypes(`sets_${field.name}`),
+      allowsNullTest: convertTypes(`allows_setting_${field.name}_to_null`),
     };
   }
   const cls = convertTypes(field.base);
@@ -95,6 +101,9 @@ const fieldTokens = (
     sampleExpr: field.isArray ? `new List<${cls}> { ${obj} }` : obj,
     nextExpr: field.isArray ? `new List<${cls}> { ${obj} }` : obj,
     nullable: field.isNullable,
+    getsTest: convertTypes(`gets_${field.name}`),
+    setsTest: convertTypes(`sets_${field.name}`),
+    allowsNullTest: convertTypes(`allows_setting_${field.name}_to_null`),
   };
 };
 
@@ -119,6 +128,7 @@ class Generator extends Emit {
       fill(typeTestTmpl, {
         schemaVersion: this.settings.schemaVersion,
         className: this.casing.convertTypes(view.name),
+        testClassName: this.casing.testClassName(view.name),
         isShaped: view.kind === "shaped",
         isUnion: view.kind === "union",
         needsList: view.kind === "shaped" && view.fields.some((f) => f.isArray),
@@ -128,6 +138,7 @@ class Generator extends Emit {
             ? view.members.map((name) => ({
                 ident: this.casing.convertTypes(name),
                 memberClass: this.casing.convertTypes(name),
+                acceptsMemberTest: this.casing.acceptsMemberTestName(name),
               }))
             : [],
       }),
