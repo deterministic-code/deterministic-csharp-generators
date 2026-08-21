@@ -2,60 +2,28 @@ using Deterministic.Backend.Errors;
 
 namespace Deterministic.Backend.Repositories.Sqlite;
 
-public class SqliteCrudRepository : ICrudRepository
+public class SqliteCrudRepository : SqlCrudRepository
 {
-    protected SqliteDatasource Datasource { get; }
-    protected string TableName { get; }
-
     public SqliteCrudRepository(SqliteDatasource datasource, string tableName)
+        : base(datasource, Dialect.Sqlite, tableName)
     {
-        Datasource = datasource ?? throw new ArgumentNullException(nameof(datasource));
-        SqlIdentifier.ValidateIdentifier(tableName);
-        TableName = tableName;
     }
 
-    public Task<IReadOnlyList<RowMap>> QueryAsync(
-        string sql,
-        IReadOnlyList<object?>? parameters = null,
-        CancellationToken cancellationToken = default)
+    protected override object? Bind(object? value) => value switch
     {
-        return Datasource.QueryAsync(sql, parameters, cancellationToken);
-    }
+        bool b => b ? 1 : 0,
+        DateTime dt => dt.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
+        _ => value,
+    };
 
-    public async Task<RowMap?> FindAsync(long id, CancellationToken cancellationToken = default)
-    {
-        var sql = SqlBuilder.BuildSelectById(Dialect.Sqlite, TableName);
-        var rows = await Datasource.QueryAsync(sql, new object?[] { id }, cancellationToken)
-            .ConfigureAwait(false);
-        return rows.Count > 0 ? rows[0] : null;
-    }
-
-    public Task<IReadOnlyList<RowMap>> FindAllAsync(CancellationToken cancellationToken = default)
-    {
-        var sql = SqlBuilder.BuildSelectAll(Dialect.Sqlite, TableName);
-        return Datasource.QueryAsync(sql, null, cancellationToken);
-    }
-
-    public Task<IReadOnlyList<RowMap>> FindByAsync(
-        string column,
-        object? value,
-        CancellationToken cancellationToken = default)
-    {
-        var sql = SqlBuilder.BuildSelectByColumn(Dialect.Sqlite, TableName, column);
-        return Datasource.QueryAsync(
-            sql,
-            new[] { ToSqliteValue(value) },
-            cancellationToken);
-    }
-
-    public virtual async Task<RowMap> AddAsync(
+    public override async Task<RowMap> AddAsync(
         IReadOnlyDictionary<string, object?> data,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(data);
         var columns = data.Keys.ToList();
-        var values = columns.Select(c => ToSqliteValue(data[c])).ToArray<object?>();
-        var sql = SqlBuilder.BuildInsert(Dialect.Sqlite, TableName, columns);
+        var values = columns.Select(c => Bind(data[c])).ToArray<object?>();
+        var sql = SqlBuilder.BuildInsert(Dialect, TableName, columns);
         var result = await Datasource.QueryAsync(sql, values, cancellationToken)
             .ConfigureAwait(false);
         var lastId = Convert.ToInt64(result[0]["last_insert_rowid"], CultureInfo.InvariantCulture);
@@ -67,7 +35,7 @@ public class SqliteCrudRepository : ICrudRepository
         return row;
     }
 
-    public virtual async Task<RowMap?> UpdateAsync(
+    public override async Task<RowMap?> UpdateAsync(
         long id,
         IReadOnlyDictionary<string, object?> data,
         CancellationToken cancellationToken = default)
@@ -78,9 +46,9 @@ public class SqliteCrudRepository : ICrudRepository
             return await FindAsync(id, cancellationToken).ConfigureAwait(false);
         }
         var columns = data.Keys.ToList();
-        var values = columns.Select(c => ToSqliteValue(data[c])).ToList();
+        var values = columns.Select(c => Bind(data[c])).ToList();
         values.Add(id);
-        var sql = SqlBuilder.BuildUpdate(Dialect.Sqlite, TableName, columns);
+        var sql = SqlBuilder.BuildUpdate(Dialect, TableName, columns);
         var result = await Datasource.QueryAsync(sql, values, cancellationToken)
             .ConfigureAwait(false);
         var changes = Convert.ToInt64(result[0]["changes"], CultureInfo.InvariantCulture);
@@ -91,19 +59,12 @@ public class SqliteCrudRepository : ICrudRepository
         return await FindAsync(id, cancellationToken).ConfigureAwait(false);
     }
 
-    public async Task<bool> DeleteAsync(long id, CancellationToken cancellationToken = default)
+    public override async Task<bool> DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
-        var sql = SqlBuilder.BuildDelete(Dialect.Sqlite, TableName);
+        var sql = SqlBuilder.BuildDelete(Dialect, TableName);
         var result = await Datasource.QueryAsync(sql, new object?[] { id }, cancellationToken)
             .ConfigureAwait(false);
         var changes = Convert.ToInt64(result[0]["changes"], CultureInfo.InvariantCulture);
         return changes > 0;
     }
-
-    protected static object? ToSqliteValue(object? value) => value switch
-    {
-        bool b => b ? 1 : 0,
-        DateTime dt => dt.ToUniversalTime().ToString("o", CultureInfo.InvariantCulture),
-        _ => value,
-    };
 }

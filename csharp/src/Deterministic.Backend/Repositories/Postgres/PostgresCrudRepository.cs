@@ -1,62 +1,26 @@
 namespace Deterministic.Backend.Repositories.Postgres;
 
-public class PostgresCrudRepository : ICrudRepository
+public class PostgresCrudRepository : SqlCrudRepository
 {
-    protected PostgresDatasource Datasource { get; }
-    protected string TableName { get; }
-
     public PostgresCrudRepository(PostgresDatasource datasource, string tableName)
+        : base(datasource, Dialect.Postgres, tableName)
     {
-        Datasource = datasource ?? throw new ArgumentNullException(nameof(datasource));
-        SqlIdentifier.ValidateIdentifier(tableName);
-        TableName = tableName;
     }
 
-    public Task<IReadOnlyList<RowMap>> QueryAsync(
-        string sql,
-        IReadOnlyList<object?>? parameters = null,
-        CancellationToken cancellationToken = default)
-    {
-        return Datasource.QueryAsync(sql, parameters, cancellationToken);
-    }
-
-    public async Task<RowMap?> FindAsync(long id, CancellationToken cancellationToken = default)
-    {
-        var sql = SqlBuilder.BuildSelectById(Dialect.Postgres, TableName);
-        var rows = await Datasource.QueryAsync(sql, new object?[] { id }, cancellationToken)
-            .ConfigureAwait(false);
-        return rows.Count > 0 ? rows[0] : null;
-    }
-
-    public Task<IReadOnlyList<RowMap>> FindAllAsync(CancellationToken cancellationToken = default)
-    {
-        var sql = SqlBuilder.BuildSelectAll(Dialect.Postgres, TableName);
-        return Datasource.QueryAsync(sql, null, cancellationToken);
-    }
-
-    public Task<IReadOnlyList<RowMap>> FindByAsync(
-        string column,
-        object? value,
-        CancellationToken cancellationToken = default)
-    {
-        var sql = SqlBuilder.BuildSelectByColumn(Dialect.Postgres, TableName, column);
-        return Datasource.QueryAsync(sql, new[] { value }, cancellationToken);
-    }
-
-    public virtual async Task<RowMap> AddAsync(
+    public override async Task<RowMap> AddAsync(
         IReadOnlyDictionary<string, object?> data,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(data);
         var columns = data.Keys.ToList();
         var values = columns.Select(c => data[c]).ToArray();
-        var sql = SqlBuilder.BuildInsert(Dialect.Postgres, TableName, columns);
+        var sql = SqlBuilder.BuildInsert(Dialect, TableName, columns);
         var rows = await Datasource.QueryAsync(sql, values, cancellationToken)
             .ConfigureAwait(false);
         return rows[0];
     }
 
-    public virtual async Task<RowMap?> UpdateAsync(
+    public override async Task<RowMap?> UpdateAsync(
         long id,
         IReadOnlyDictionary<string, object?> data,
         CancellationToken cancellationToken = default)
@@ -69,15 +33,15 @@ public class PostgresCrudRepository : ICrudRepository
         var columns = data.Keys.ToList();
         var values = columns.Select(c => data[c]).ToList();
         values.Add(id);
-        var sql = SqlBuilder.BuildUpdate(Dialect.Postgres, TableName, columns);
+        var sql = SqlBuilder.BuildUpdate(Dialect, TableName, columns);
         var rows = await Datasource.QueryAsync(sql, values, cancellationToken)
             .ConfigureAwait(false);
         return rows.Count > 0 ? rows[0] : null;
     }
 
-    public async Task<bool> DeleteAsync(long id, CancellationToken cancellationToken = default)
+    public override async Task<bool> DeleteAsync(long id, CancellationToken cancellationToken = default)
     {
-        var sql = SqlBuilder.BuildDelete(Dialect.Postgres, TableName);
+        var sql = SqlBuilder.BuildDelete(Dialect, TableName);
         var rows = await Datasource.QueryAsync(sql, new object?[] { id }, cancellationToken)
             .ConfigureAwait(false);
         return rows.Count > 0;
