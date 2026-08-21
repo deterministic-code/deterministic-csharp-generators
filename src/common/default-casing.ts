@@ -17,6 +17,19 @@ export type PackCasing = ICasingStrategy & {
   directory: (entity: string) => string
   filePath: (stem: string) => string
   serviceClassName: (entity: string) => string
+  serviceInterfaceName: (entity: string) => string
+  authoredInterfaceName: (name: string) => string
+  interfaceName: (stem: string) => string
+  testClassName: (entity: string) => string
+  validatorTestClassName: (entity: string) => string
+  getsTestName: (field: string) => string
+  setsTestName: (field: string) => string
+  allowsNullTestName: (field: string) => string
+  acceptsMemberTestName: (name: string) => string
+  nameSourceInterfaceName: (target: string) => string
+  nameRowTypeName: (target: string) => string
+  enrichItemsMethodName: (target: string) => string
+  enrichItemMethodName: (target: string) => string
 };
 
 /** Language defaults + settings overrides. Layout (by-feature) lives on ImportGenerator. */
@@ -37,6 +50,27 @@ export const createCasing = (
     directory,
     filePath,
     serviceClassName: (entity: string) => casing.convertTypes(`${entity}_service`),
+    serviceInterfaceName: (entity: string) =>
+      casing.convertTypes(`i_${entity}_service`),
+    authoredInterfaceName: (name: string) => casing.convertTypes(`i_${name}`),
+    interfaceName: (stem: string) => casing.convertTypes(`i_${stem}`),
+    testClassName: (entity: string) => casing.convertTypes(`${entity}_tests`),
+    validatorTestClassName: (entity: string) =>
+      casing.convertTypes(`${entity}_validator_tests`),
+    getsTestName: (field: string) => casing.convertTypes(`gets_${field}`),
+    setsTestName: (field: string) => casing.convertTypes(`sets_${field}`),
+    allowsNullTestName: (field: string) =>
+      casing.convertTypes(`allows_setting_${field}_to_null`),
+    acceptsMemberTestName: (name: string) =>
+      casing.convertTypes(`accepts_${name}_member`),
+    nameSourceInterfaceName: (target: string) =>
+      casing.convertTypes(`i_${target}_name_source`),
+    nameRowTypeName: (target: string) =>
+      casing.convertTypes(`${target}_name_row`),
+    enrichItemsMethodName: (target: string) =>
+      casing.convertTypes(`enrich_items_with_${target}_name_async`),
+    enrichItemMethodName: (target: string) =>
+      casing.convertTypes(`enrich_item_with_${target}_name_async`),
   };
 };
 

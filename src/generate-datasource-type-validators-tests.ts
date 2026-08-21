@@ -175,6 +175,7 @@ class Generator extends Emit {
       fill(typeTestTmpl, {
         schemaVersion: this.settings.schemaVersion,
         className,
+        testClassName: this.casing.validatorTestClassName(table.name),
         validatorClass: this.casing.convertTypes(
           `datasource_${table.name}_validator`,
         ),

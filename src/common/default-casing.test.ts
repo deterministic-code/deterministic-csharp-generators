@@ -13,6 +13,15 @@ describe("createCasing Auto defaults", () => {
     assert.equal(casing.convertDirectories(NAME), "notificationType");
     assert.equal(casing.filePath(NAME), "notificationType.cs");
     assert.equal(casing.serviceClassName("user"), "UserService");
+    assert.equal(casing.serviceInterfaceName("contact"), "IContactService");
+    assert.equal(
+      casing.authoredInterfaceName("ContactImportService"),
+      "IContactImportService",
+    );
+    assert.equal(casing.interfaceName("usersRouter"), "IUsersRouter");
+    assert.equal(casing.nameSourceInterfaceName("role"), "IRoleNameSource");
+    assert.equal(casing.testClassName("user"), "UserTests");
+    assert.equal(casing.getsTestName("nick_name"), "GetsNickName");
   });
 });
 
@@ -43,6 +52,16 @@ describe("createCasing overrides", () => {
       "languages.csharp.casing.fields": "Snake",
     });
     assert.equal(casing.convertFields("RoleId"), "role_id");
+  });
+
+  it("snakes authored interface names from the i_ stem", () => {
+    const casing = createCasing({
+      "languages.csharp.casing.types": "Snake",
+    });
+    assert.equal(
+      casing.authoredInterfaceName("ContactImportService"),
+      "i_contact_import_service",
+    );
   });
 
   it("kebabs directories", () => {

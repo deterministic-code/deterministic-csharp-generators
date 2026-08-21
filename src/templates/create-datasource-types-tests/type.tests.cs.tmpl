@@ -4,7 +4,7 @@ using Backend.Types.Datasource;
 
 namespace Backend.Tests.Datasource;
 
-public class {{className}}Tests
+public class {{testClassName}}
 {
     private static {{className}} Sample() => new {{className}}
     {
@@ -15,7 +15,7 @@ public class {{className}}Tests
 
 {{#fields}}
     [Fact]
-    public void Gets{{ident}}()
+    public void {{getsTest}}()
     {
         var initial = {{&sampleExpr}};
         var value = Sample();
@@ -24,7 +24,7 @@ public class {{className}}Tests
     }
 
     [Fact]
-    public void Sets{{ident}}()
+    public void {{setsTest}}()
     {
         var value = Sample();
         var next = {{&nextExpr}};
@@ -33,7 +33,7 @@ public class {{className}}Tests
     }
 {{#nullable}}
     [Fact]
-    public void AllowsSetting{{ident}}ToNull()
+    public void {{allowsNullTest}}()
     {
         var value = Sample();
         value.{{ident}} = null;

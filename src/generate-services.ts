@@ -35,7 +35,7 @@ class Generator extends Emit {
 
   private custom(entry: CustomServiceEntry): GenerateEntry {
     const className = this.casing.convertTypes(entry.name);
-    const interfaceName = `I${className}`;
+    const interfaceName = this.casing.interfaceName(entry.name);
     return content(
       this.imports.serviceCustom(entry.name, entry.module),
       fill(customStubTmpl, {

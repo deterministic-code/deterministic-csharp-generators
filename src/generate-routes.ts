@@ -48,16 +48,15 @@ class Generator extends Emit {
   }
 
   private router(candidate: RouteCandidate): GenerateEntry {
-    const className = this.casing.convertTypes(
-      this.imports.routeModule(candidate.name),
-    );
+    const moduleName = this.imports.routeModule(candidate.name);
+    const className = this.casing.convertTypes(moduleName);
     return content(
       this.imports.route(candidate.name),
       fill(routerTmpl, {
         simpleDoc: this.settings.simpleDoc,
         descriptionDoc: this.settings.descriptionDoc,
         className,
-        interfaceName: `I${className}`,
+        interfaceName: this.casing.interfaceName(moduleName),
       }),
     );
   }
@@ -67,19 +66,21 @@ class Generator extends Emit {
     return content(
       this.imports.routeCustom(entry.name),
       fill(customStubTmpl, {
-        interfaceName: `I${className}`,
+        interfaceName: this.casing.interfaceName(`${entry.name}_route`),
         className,
       }),
     );
   }
 
   private enrichment(targetTable: string): GenerateEntry {
-    const targetPascal = this.casing.convertTypes(targetTable);
     return content(
       this.imports.enrichment(targetTable),
       fill(nameEnrichmentTmpl, {
         className: this.casing.convertTypes(`${targetTable}_name_enrichment`),
-        targetPascal,
+        enrichItemsMethod: this.casing.enrichItemsMethodName(targetTable),
+        enrichItemMethod: this.casing.enrichItemMethodName(targetTable),
+        sourceInterfaceName: this.casing.nameSourceInterfaceName(targetTable),
+        rowTypeName: this.casing.nameRowTypeName(targetTable),
         targetTable,
         fkProp: this.casing.convertFields(`${targetTable}_id`),
         nameProp: this.casing.convertFields(`${targetTable}_name`),

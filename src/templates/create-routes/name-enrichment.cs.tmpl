@@ -7,9 +7,9 @@ namespace Routes.Enrichment;
 
 public static class {{className}}
 {
-    public static async Task<IList<T>> EnrichItemsWith{{targetPascal}}NameAsync<T>(
+    public static async Task<IList<T>> {{enrichItemsMethod}}<T>(
         IList<T> items,
-        I{{targetPascal}}NameSource source)
+        {{sourceInterfaceName}} source)
     {
         if (items.Count == 0) return items;
         var rows = await source.FindAllAsync();
@@ -20,30 +20,30 @@ public static class {{className}}
             if (!map.TryGetValue(id, out var name))
             {
                 throw new InvalidOperationException(
-                    $"EnrichItemsWith{{targetPascal}}NameAsync: no {{targetTable}} row for id {id}");
+                    $"{{enrichItemsMethod}}: no {{targetTable}} row for id {id}");
             }
             item.GetType().GetProperty("{{nameProp}}")?.SetValue(item, name);
         }
         return items;
     }
 
-    public static async Task<T> EnrichItemWith{{targetPascal}}NameAsync<T>(
+    public static async Task<T> {{enrichItemMethod}}<T>(
         T item,
-        I{{targetPascal}}NameSource source)
+        {{sourceInterfaceName}} source)
     {
         var id = (long)(item!.GetType().GetProperty("{{fkProp}}")!.GetValue(item)!);
         var row = await source.FindAsync(id)
             ?? throw new InvalidOperationException(
-                $"EnrichItemWith{{targetPascal}}NameAsync: no {{targetTable}} row for id {id}");
+                $"{{enrichItemMethod}}: no {{targetTable}} row for id {id}");
         item.GetType().GetProperty("{{nameProp}}")?.SetValue(item, row.Name);
         return item;
     }
 }
 
-public interface I{{targetPascal}}NameSource
+public interface {{sourceInterfaceName}}
 {
-    Task<IReadOnlyList<{{targetPascal}}NameRow>> FindAllAsync();
-    Task<{{targetPascal}}NameRow?> FindAsync(long id);
+    Task<IReadOnlyList<{{rowTypeName}}>> FindAllAsync();
+    Task<{{rowTypeName}}?> FindAsync(long id);
 }
 
-public sealed record {{targetPascal}}NameRow(long Id, string Name);
+public sealed record {{rowTypeName}}(long Id, string Name);

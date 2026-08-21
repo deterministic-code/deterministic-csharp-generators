@@ -82,6 +82,7 @@ const fieldTokens = (
     isNullable: boolean;
   },
   convertFields: (name: string) => string,
+  convertTypes: (name: string) => string,
 ) => {
   const ident = convertFields(field.name);
   const native = convertSpecType(field.type);
@@ -91,6 +92,9 @@ const fieldTokens = (
     sampleExpr: sample,
     nextExpr: next,
     nullable: field.isNullable,
+    getsTest: convertTypes(`gets_${field.name}`),
+    setsTest: convertTypes(`sets_${field.name}`),
+    allowsNullTest: convertTypes(`allows_setting_${field.name}_to_null`),
   };
 };
 
@@ -103,13 +107,18 @@ class Generator extends Emit {
 
   private tests(table: DatasourceType): GenerateEntry {
     const fields = table.fields.map((f) =>
-      fieldTokens(f, (name) => this.casing.convertFields(name)),
+      fieldTokens(
+        f,
+        (name) => this.casing.convertFields(name),
+        (name) => this.casing.convertTypes(name),
+      ),
     );
     return content(
       this.imports.test(this.imports.datasource(table.name), table.name),
       fill(typeTestTmpl, {
         schemaVersion: this.settings.schemaVersion,
         className: this.casing.convertTypes(table.name),
+        testClassName: this.casing.testClassName(table.name),
         fields,
       }),
     );

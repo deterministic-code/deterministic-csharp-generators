@@ -244,6 +244,7 @@ class Generator extends Emit {
       fill(typeTestTmpl, {
         schemaVersion: this.settings.schemaVersion,
         className: this.casing.convertTypes(view.name),
+        testClassName: this.casing.validatorTestClassName(view.name),
         validatorClass: this.casing.convertTypes(`${view.name}_validator`),
         isUnion: view.kind === "union",
         needsList: cases.some((c) => c.fixture.includes("new List<")),

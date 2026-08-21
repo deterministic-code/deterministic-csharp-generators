@@ -8,7 +8,9 @@ import { genericTmpl } from "./resources/routes-tests.ts";
 class Generator extends Emit {
   from(deterministic: IDeterministic): GenerateEntry[] {
     return deterministic.routes.candidates.map((c) => {
-      const testClass = `${this.casing.convertTypes(this.imports.routeModule(c.name))}Tests`;
+      const testClass = this.casing.convertTypes(
+        `${this.imports.routeModule(c.name)}_tests`,
+      );
       return content(
         this.imports.routeTest(c.name),
         fill(genericTmpl, { testClass }),
