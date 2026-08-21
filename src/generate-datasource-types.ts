@@ -4,7 +4,7 @@ import { content, type GenerateEntry } from "@deterministic-code/generators-comm
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
-  type ExpandedDatasourceType,
+  type DatasourceType,
   type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
@@ -26,7 +26,7 @@ class Generator extends Emit {
     );
   }
 
-  private type(table: ExpandedDatasourceType): GenerateEntry {
+  private type(table: DatasourceType): GenerateEntry {
     const { schemaVersion, simpleDoc, descriptionDoc } = this.settings;
     const fields = table.fields.map((f) => ({
       name: f.name,
