@@ -9,7 +9,7 @@ public class InterfacesContractTests
     [Fact]
     public void IRepository_CanBeImplemented()
     {
-        IRepository repo = new InMemoryRepository();
+        IRepository repo = new InMemoryCrudRepository();
         Assert.NotNull(repo);
     }
 

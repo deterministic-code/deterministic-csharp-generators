@@ -96,10 +96,10 @@ public class SqliteLiveTests
     }
 
     [Fact]
-    public async Task SqliteRepository_QueryPassthrough()
+    public async Task SqliteCrudRepository_QueryPassthrough()
     {
         await using var ds = await MakeUsersDatasourceAsync();
-        var repo = new SqliteRepository(ds);
+        var repo = new SqliteCrudRepository(ds, "users");
         await ds.QueryAsync(
             "INSERT INTO users (name, age) VALUES ($p1, $p2)",
             new object?[] { "alice", 30L });
