@@ -1,11 +1,6 @@
-import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import {
-  createImportGenerator,
-  type CsharpImportGenerator,
-} from "./import-generator.ts";
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
@@ -13,17 +8,8 @@ import {
   type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
+import { Emit } from "./emit.ts";
 import { typeTestTmpl } from "./resources/datasource-types-tests.ts";
-
-type EmitOptions = {
-  imports: CsharpImportGenerator;
-  schemaVersion: string;
-};
-
-const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  imports: createImportGenerator(".", settings),
-  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
-});
 
 const samplesForNative = (
   native: string,
@@ -90,10 +76,14 @@ const samplesForNative = (
 };
 
 const fieldTokens = (
-  field: { name: string; type: string; isNullable: boolean },
-  opts: EmitOptions,
+  field: {
+    name: string;
+    type: string;
+    isNullable: boolean;
+  },
+  convertFields: (name: string) => string,
 ) => {
-  const ident = pascalCase(field.name);
+  const ident = convertFields(field.name);
   const native = convertSpecType(field.type);
   const { sample, next } = samplesForNative(native, field.type);
   return {
@@ -104,40 +94,33 @@ const fieldTokens = (
   };
 };
 
-const testPath = (entity: string, imports: CsharpImportGenerator): string =>
-  imports.test(imports.datasource(entity), entity);
+class Generator extends Emit {
+  from(deterministic: IDeterministic): GenerateEntry[] {
+    return deterministic.expandedDatasourceTypes.map((table) =>
+      this.tests(table),
+    );
+  }
 
-const renderTests = (
-  table: DatasourceType,
-  opts: EmitOptions,
-): GenerateEntry => {
-  const fields = table.fields.map((f) => fieldTokens(f, opts));
-  return content(
-    testPath(table.name, opts.imports),
-    fill(typeTestTmpl, {
-      schemaVersion: opts.schemaVersion,
-      className: pascalCase(table.name),
-      fields,
-    }),
-  );
-};
-
-const generateFrom = (
-  deterministic: IDeterministic,
-  settings: Record<string, string>,
-): GenerateEntry[] => {
-  const opts = emitOptions(settings);
-  return deterministic.expandedDatasourceTypes.map((table) =>
-    renderTests(table, opts),
-  );
-};
+  private tests(table: DatasourceType): GenerateEntry {
+    const fields = table.fields.map((f) =>
+      fieldTokens(f, (name) => this.casing.convertFields(name)),
+    );
+    return content(
+      this.imports.test(this.imports.datasource(table.name), table.name),
+      fill(typeTestTmpl, {
+        schemaVersion: this.settings.schemaVersion,
+        className: this.casing.convertTypes(table.name),
+        fields,
+      }),
+    );
+  }
+}
 
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   await ctx.reader.read(DATASOURCE_TYPES_YAML);
-  return generateFrom(
+  return new Generator(ctx.settings).from(
     await DeterministicParser(ctx.reader).parse(ctx.settings),
-    ctx.settings,
   );
 };

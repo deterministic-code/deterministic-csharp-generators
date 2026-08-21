@@ -1,11 +1,6 @@
-import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import {
-  createImportGenerator,
-  type CsharpImportGenerator,
-} from "./import-generator.ts";
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
@@ -14,15 +9,8 @@ import {
   type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
-import { isFiniteInt, isFiniteNumber } from "@deterministic-code/generators-common/yaml-entry";
+import { Emit } from "./emit.ts";
 import { typeTmpl } from "./resources/datasource-type-validators.ts";
-
-type EmitOptions = {
-  imports: CsharpImportGenerator;
-  schemaVersion: string;
-  namespace: string;
-  typesNamespace: string;
-};
 
 type FieldShape = {
   name: string;
@@ -37,13 +25,6 @@ const STANDARD_COLUMN_NAMES = new Set(["id", "uuid", "created", "updated"]);
 
 const UUID_PATTERN =
   "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
-
-const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  imports: createImportGenerator(".", settings),
-  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
-  namespace: "Backend.Validators.Datasource",
-  typesNamespace: "Backend.Types.Datasource",
-});
 
 const numericLiteralForNative = (
   native: string,
@@ -76,10 +57,10 @@ const numericLiteral = (fieldType: string, value: number): string => {
 
 const tightenString = (field: FieldShape): string[] => {
   const rules: string[] = [];
-  if (isFiniteInt(field.minSize) && field.minSize! >= 0) {
+  if (field.minSize !== undefined && field.minSize >= 0) {
     rules.push(`MinimumLength(${field.minSize})`);
   }
-  if (isFiniteInt(field.size) && field.size! >= 0) {
+  if (field.size !== undefined && field.size >= 0) {
     rules.push(`MaximumLength(${field.size})`);
   }
   return rules;
@@ -93,25 +74,25 @@ const tightenNumber = (field: FieldShape): string[] => {
   const isIdLike = field.name === "id" || field.name.endsWith("_id");
   if (isFk || isIdLike) {
     rules.push(`GreaterThanOrEqualTo(${lit(0)})`);
-  } else if (isFiniteInt(field.minSize)) {
-    rules.push(`GreaterThanOrEqualTo(${lit(field.minSize!)})`);
+  } else if (field.minSize !== undefined) {
+    rules.push(`GreaterThanOrEqualTo(${lit(field.minSize)})`);
   }
-  if (isFiniteInt(field.size)) {
-    rules.push(`LessThanOrEqualTo(${lit(field.size!)})`);
+  if (field.size !== undefined) {
+    rules.push(`LessThanOrEqualTo(${lit(field.size)})`);
   }
   return rules;
 };
 
 const tightenFloat = (field: FieldShape): string[] => {
   const rules: string[] = [];
-  if (isFiniteNumber(field.minSize)) {
+  if (field.minSize !== undefined) {
     rules.push(
-      `GreaterThanOrEqualTo(${numericLiteral(field.type, field.minSize!)})`,
+      `GreaterThanOrEqualTo(${numericLiteral(field.type, field.minSize)})`,
     );
   }
-  if (isFiniteNumber(field.size)) {
+  if (field.size !== undefined) {
     rules.push(
-      `LessThanOrEqualTo(${numericLiteral(field.type, field.size!)})`,
+      `LessThanOrEqualTo(${numericLiteral(field.type, field.size)})`,
     );
   }
   return rules;
@@ -137,8 +118,11 @@ const tightenedRulesFor = (field: FieldShape): string[] => {
   }
 };
 
-const ruleLine = (field: FieldShape, opts: EmitOptions): string => {
-  const prop = pascalCase(field.name);
+const ruleLine = (
+  field: FieldShape,
+  convertFields: (name: string) => string,
+): string => {
+  const prop = convertFields(field.name);
   const tightened = tightenedRulesFor(field);
   const parts: string[] = [];
   if (!field.isNullable) parts.push("NotNull()");
@@ -154,8 +138,12 @@ const ruleLine = (field: FieldShape, opts: EmitOptions): string => {
   return `${head}\n${chain};`;
 };
 
-const standardRuleLine = (name: string, opts: EmitOptions, idType: string): string => {
-  const prop = pascalCase(name);
+const standardRuleLine = (
+  name: string,
+  idType: string,
+  convertFields: (name: string) => string,
+): string => {
+  const prop = convertFields(name);
   if (name === "id") {
     const bound = numericLiteralForNative(
       convertSpecType(idType),
@@ -169,48 +157,46 @@ const standardRuleLine = (name: string, opts: EmitOptions, idType: string): stri
   return `        RuleFor(x => x.${prop})\n            .NotNull();`;
 };
 
-const validatorPath = (entity: string, imports: CsharpImportGenerator): string =>
-  imports.datasourceValidator(entity);
+class Generator extends Emit {
+  private readonly namespace = "Backend.Validators.Datasource";
+  private readonly typesNamespace = "Backend.Types.Datasource";
 
-const renderValidator = (
-  table: ExpandedDatasourceType,
-  opts: EmitOptions,
-): GenerateEntry => {
-  const className = pascalCase(table.name);
-  const rules = table.fields.map((field: DatasourceField) =>
-    STANDARD_COLUMN_NAMES.has(field.name)
-      ? standardRuleLine(field.name, opts, field.type)
-      : ruleLine(field, opts),
-  );
-  return content(
-    validatorPath(table.name, opts.imports),
-    fill(typeTmpl, {
-      schemaVersion: opts.schemaVersion,
-      namespace: opts.namespace,
-      typesNamespace: opts.typesNamespace,
-      className,
-      validatorClass: `Datasource${className}Validator`,
-      rules: rules.map((line) => ({ line })),
-    }),
-  );
-};
+  from(deterministic: IDeterministic): GenerateEntry[] {
+    return deterministic.expandedDatasourceTypes.map((table) =>
+      this.validator(table),
+    );
+  }
 
-const generateFrom = (
-  deterministic: IDeterministic,
-  settings: Record<string, string>,
-): GenerateEntry[] => {
-  const opts = emitOptions(settings);
-  return deterministic.expandedDatasourceTypes.map((table) =>
-    renderValidator(table, opts),
-  );
-};
+  private validator(table: ExpandedDatasourceType): GenerateEntry {
+    const className = this.casing.convertTypes(table.name);
+    const convertFields = (name: string): string =>
+      this.casing.convertFields(name);
+    const rules = table.fields.map((field: DatasourceField) =>
+      STANDARD_COLUMN_NAMES.has(field.name)
+        ? standardRuleLine(field.name, field.type, convertFields)
+        : ruleLine(field, convertFields),
+    );
+    return content(
+      this.imports.datasourceValidator(table.name),
+      fill(typeTmpl, {
+        schemaVersion: this.settings.schemaVersion,
+        namespace: this.namespace,
+        typesNamespace: this.typesNamespace,
+        className,
+        validatorClass: this.casing.convertTypes(
+          `datasource_${table.name}_validator`,
+        ),
+        rules: rules.map((line) => ({ line })),
+      }),
+    );
+  }
+}
 
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   await ctx.reader.read(DATASOURCE_TYPES_YAML);
-  return generateFrom(
+  return new Generator(ctx.settings).from(
     await DeterministicParser(ctx.reader).parse(ctx.settings),
-    ctx.settings,
   );
 };

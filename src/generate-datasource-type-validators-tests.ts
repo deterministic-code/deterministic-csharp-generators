@@ -1,11 +1,6 @@
-import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import {
-  createImportGenerator,
-  type CsharpImportGenerator,
-} from "./import-generator.ts";
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
@@ -14,14 +9,11 @@ import {
   type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
+import { Emit } from "./emit.ts";
 import { typeTestTmpl } from "./resources/datasource-type-validators-tests.ts";
 
-type EmitOptions = {
-  imports: CsharpImportGenerator;
-  schemaVersion: string;
-};
-
 type FieldTok = {
+  name: string;
   ident: string;
   sampleExpr: string;
   isNullable: boolean;
@@ -33,11 +25,6 @@ type CaseTok = {
   fixture: string;
   assertion: string;
 };
-
-const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  imports: createImportGenerator(".", settings),
-  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
-});
 
 const samplesForNative = (
   native: string,
@@ -94,14 +81,15 @@ const samplesForNative = (
 
 const fieldTok = (
   field: DatasourceField | { name: string; type: string; isNullable: boolean },
-  opts: EmitOptions,
+  convertFields: (name: string) => string,
 ): FieldTok => {
   const { sample } = samplesForNative(
     convertSpecType(field.type),
     field.type,
   );
   return {
-    ident: pascalCase(field.name),
+    name: field.name,
+    ident: convertFields(field.name),
     sampleExpr: sample,
     isNullable: field.isNullable,
     type: field.type,
@@ -114,7 +102,11 @@ const objectLiteral = (
 ): string =>
   `new ${cls} { ${fields.map((f) => `${f.ident} = ${f.expr}`).join(", ")} }`;
 
-const casesFor = (cls: string, fields: FieldTok[]): CaseTok[] => {
+const casesFor = (
+  cls: string,
+  fields: FieldTok[],
+  convertTypes: (text: string) => string,
+): CaseTok[] => {
   const valid = objectLiteral(
     cls,
     fields.map((f) => ({ ident: f.ident, expr: f.sampleExpr })),
@@ -138,7 +130,7 @@ const casesFor = (cls: string, fields: FieldTok[]): CaseTok[] => {
   for (const field of fields) {
     if (!field.isNullable && field.type === "string") {
       cases.push({
-        ident: `RejectsNullFor${pascalCase(field.ident)}`,
+        ident: convertTypes(`rejects_null_for_${field.name}`),
         fixture: objectLiteral(
           cls,
           fields.map((f) => ({
@@ -151,7 +143,7 @@ const casesFor = (cls: string, fields: FieldTok[]): CaseTok[] => {
     }
     if (field.type === "uuid") {
       cases.push({
-        ident: `RejectsWhenInvalidUuidOn${pascalCase(field.ident)}`,
+        ident: convertTypes(`rejects_when_invalid_uuid_on_${field.name}`),
         fixture: objectLiteral(
           cls,
           fields.map((f) => ({
@@ -166,39 +158,39 @@ const casesFor = (cls: string, fields: FieldTok[]): CaseTok[] => {
   return cases;
 };
 
-const renderTests = (
-  table: DatasourceType,
-  opts: EmitOptions,
-): GenerateEntry => {
-  const fields = table.fields.map((f) => fieldTok(f, opts));
-  const className = pascalCase(table.name);
-  return content(
-    opts.imports.test(opts.imports.datasourceValidator(table.name), table.name),
-    fill(typeTestTmpl, {
-      schemaVersion: opts.schemaVersion,
-      className,
-      validatorClass: `Datasource${className}Validator`,
-      cases: casesFor(className, fields),
-    }),
-  );
-};
+class Generator extends Emit {
+  from(deterministic: IDeterministic): GenerateEntry[] {
+    return deterministic.expandedDatasourceTypes.map((table) =>
+      this.tests(table),
+    );
+  }
 
-const generateFrom = (
-  deterministic: IDeterministic,
-  settings: Record<string, string>,
-): GenerateEntry[] => {
-  const opts = emitOptions(settings);
-  return deterministic.expandedDatasourceTypes.map((table) =>
-    renderTests(table, opts),
-  );
-};
+  private tests(table: DatasourceType): GenerateEntry {
+    const fields = table.fields.map((f) =>
+      fieldTok(f, (name) => this.casing.convertFields(name)),
+    );
+    const className = this.casing.convertTypes(table.name);
+    return content(
+      this.imports.test(this.imports.datasourceValidator(table.name), table.name),
+      fill(typeTestTmpl, {
+        schemaVersion: this.settings.schemaVersion,
+        className,
+        validatorClass: this.casing.convertTypes(
+          `datasource_${table.name}_validator`,
+        ),
+        cases: casesFor(className, fields, (text) =>
+          this.casing.convertTypes(text),
+        ),
+      }),
+    );
+  }
+}
 
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   await ctx.reader.read(DATASOURCE_TYPES_YAML);
-  return generateFrom(
+  return new Generator(ctx.settings).from(
     await DeterministicParser(ctx.reader).parse(ctx.settings),
-    ctx.settings,
   );
 };

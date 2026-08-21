@@ -1,4 +1,3 @@
-import { pascalCase } from "change-case";
 import pluralize from "pluralize";
 import type { IImportGenerator } from "@deterministic-code/generators-common/import-generator";
 import { createCasing, type PackCasing } from "./common/default-casing.ts";
@@ -39,11 +38,11 @@ export class CsharpImportGenerator implements IImportGenerator {
   }
 
   datasourceQual(entity: string): string {
-    return `Backend.Types.Datasource.${pascalCase(entity)}`;
+    return `Backend.Types.Datasource.${this.casing.convertTypes(entity)}`;
   }
 
   datasourceValidator(entity: string): string {
-    return this.underBase(`Datasource${pascalCase(entity)}Validator.cs`);
+    return this.underBase(this.csFile(`datasource_${entity}_validator`));
   }
 
   datasourceValidatorRel(entity: string): string {
@@ -51,7 +50,7 @@ export class CsharpImportGenerator implements IImportGenerator {
   }
 
   view(entity: string): string {
-    return this.underBase(`${pascalCase(entity)}.cs`);
+    return this.underBase(this.csFile(entity));
   }
 
   viewRel(entity: string): string {
@@ -59,11 +58,11 @@ export class CsharpImportGenerator implements IImportGenerator {
   }
 
   viewQual(entity: string): string {
-    return `Backend.Types.View.${pascalCase(entity)}`;
+    return `Backend.Types.View.${this.casing.convertTypes(entity)}`;
   }
 
   viewValidator(entity: string): string {
-    return this.underBase(`${pascalCase(entity)}Validator.cs`);
+    return this.underBase(this.csFile(`${entity}_validator`));
   }
 
   viewValidatorRel(entity: string): string {
@@ -71,7 +70,7 @@ export class CsharpImportGenerator implements IImportGenerator {
   }
 
   service(entity: string): string {
-    return this.underBase(`${pascalCase(`${entity}_service`)}.cs`);
+    return this.underBase(this.csFile(`${entity}_service`));
   }
 
   serviceRel(entity: string): string {
@@ -79,23 +78,23 @@ export class CsharpImportGenerator implements IImportGenerator {
   }
 
   serviceCustom(name: string, _module?: string): string {
+    const file = this.csFile(name);
     return this.underBase(
       this.organizeByFeature
-        ? `Features/${this.casing.directory(featureEntity(name))}/custom/${pascalCase(name)}.cs`
-        : `../custom/${pascalCase(name)}.cs`,
+        ? `Features/${this.casing.directory(featureEntity(name))}/custom/${file}`
+        : `../custom/${file}`,
     );
   }
 
   serviceCustomRel(entity: string): string {
+    const file = this.csFile(entity);
     return this.organizeByFeature
-      ? `Features/${this.casing.directory(entity)}/custom/${pascalCase(entity)}.cs`
-      : `../custom/${pascalCase(entity)}.cs`;
+      ? `Features/${this.casing.directory(entity)}/custom/${file}`
+      : `../custom/${file}`;
   }
 
   serviceTest(entity: string): string {
-    return this.underBase(
-      `${pascalCase(`${entity}_service_tests`)}.cs`,
-    );
+    return this.underBase(this.csFile(`${entity}_service_tests`));
   }
 
   serviceTestRel(entity: string): string {
@@ -123,29 +122,29 @@ export class CsharpImportGenerator implements IImportGenerator {
   }
 
   routeCustom(name: string, _module?: string): string {
+    const file = this.csFile(`${name}_route`);
     return this.underBase(
       this.organizeByFeature
-        ? `Features/${this.casing.directory(featureEntity(name))}/custom/${pascalCase(`${name}_route`)}.cs`
-        : `../custom/${pascalCase(`${name}_route`)}.cs`,
+        ? `Features/${this.casing.directory(featureEntity(name))}/custom/${file}`
+        : `../custom/${file}`,
     );
   }
 
   routeTest(entity: string): string {
-    return this.underBase(`${this.routeModule(entity)}Tests.cs`);
-  }
-
-  enrichment(targetTable: string): string {
     return this.underBase(
-      `${pascalCase(`${targetTable}_name_enrichment`)}.cs`,
+      this.csFile(`${pluralSnake(entity)}_router_tests`),
     );
   }
 
+  enrichment(targetTable: string): string {
+    return this.underBase(this.csFile(`${targetTable}_name_enrichment`));
+  }
+
   test(srcFile: string, fileBase: string): string {
-    const pascal = pascalCase(fileBase);
-    const file = srcFile.includes("Validator")
-      ? `${pascal}ValidatorTests.cs`
-      : `${pascal}Tests.cs`;
-    return this.underBase(file);
+    const stem = srcFile.includes("Validator")
+      ? `${fileBase}_validator_tests`
+      : `${fileBase}_tests`;
+    return this.underBase(this.csFile(stem));
   }
 
   testSpec(_srcFile: string, _fileBase: string): string {
@@ -161,7 +160,7 @@ export class CsharpImportGenerator implements IImportGenerator {
   }
 
   routeModule(entity: string): string {
-    return pascalCase(`${pluralSnake(entity)}_router`);
+    return this.casing.fileBase(`${pluralSnake(entity)}_router`);
   }
 
   appWiring(): string {
@@ -180,8 +179,16 @@ export class CsharpImportGenerator implements IImportGenerator {
     return entity.replace(/_/g, "-");
   }
 
+  frontend(relPath: string): string {
+    return `frontend/${relPath}`;
+  }
+
+  private csFile(stem: string): string {
+    return `${this.casing.fileBase(stem)}.cs`;
+  }
+
   private casedFile(entity: string): string {
-    const file = `${this.casing.fileBase(entity)}.cs`;
+    const file = this.csFile(entity);
     return this.organizeByFeature
       ? `Features/${this.casing.directory(entity)}/${file}`
       : file;

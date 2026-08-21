@@ -71,9 +71,9 @@ describe("generate datasource type validators", () => {
   const userBody = async (settings: Record<string, string> = {}) => {
     const map = indexEntries(await generateWith(settings));
     const userFile = [...map.keys()].find((name) =>
-      name.endsWith("DatasourceUserValidator.cs"),
+      name.endsWith("datasourceUserValidator.cs"),
     );
-    assert.ok(userFile, "missing DatasourceUserValidator.cs generate entry");
+    assert.ok(userFile, "missing datasourceUserValidator.cs generate entry");
     return entryBody(requireEntry(map, userFile));
   };
 
@@ -92,7 +92,7 @@ describe("generate datasource type validators", () => {
     const byName = indexEntries(await generateWith({}));
     assert.deepEqual(
       [...byName.keys()].sort(),
-      ["DatasourceRoleValidator.cs", "DatasourceUserValidator.cs"],
+      ["datasourceRoleValidator.cs", "datasourceUserValidator.cs"],
     );
   });
 

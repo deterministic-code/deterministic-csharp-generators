@@ -118,7 +118,7 @@ describe("generate view types", () => {
   });
 
   it("renders a shaped view, a union interface, and an inlined inherit", async () => {
-    const card = await bodyOf("CardPayment.cs");
+    const card = await bodyOf("cardPayment.cs");
     assert.match(card, /namespace Backend\.Types\.View;/);
     assert.match(card, /public class CardPayment/);
     assert.match(card, /public string Amount \{ get; set; \}/);
@@ -128,9 +128,9 @@ describe("generate view types", () => {
     );
     assert.match(card, /public string\? Note \{ get; set; \}/);
     assert.match(card, /using System\.Collections\.Generic;/);
-    const payment = await bodyOf("Payment.cs");
+    const payment = await bodyOf("payment.cs");
     assert.match(payment, /public interface Payment \{\}/);
-    const summary = await bodyOf("UserSummary.cs");
+    const summary = await bodyOf("userSummary.cs");
     assert.match(summary, /public class UserSummary/);
     assert.doesNotMatch(summary, /: Backend\.Types\.Datasource\.User/);
     assert.match(summary, /public string DisplayName \{ get; set; \}/);
@@ -140,7 +140,7 @@ describe("generate view types", () => {
   });
 
   it("extends the datasource type when inherit is a pass-through", async () => {
-    const role = await bodyOf("Role.cs");
+    const role = await bodyOf("role.cs");
     assert.match(
       role,
       /public class Role : Backend\.Types\.Datasource\.Role/,

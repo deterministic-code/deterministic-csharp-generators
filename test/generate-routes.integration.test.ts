@@ -82,28 +82,28 @@ describe("generate-routes", () => {
     });
 
     const paths = entries.map((e) => e.filename).sort();
-    assert.ok(paths.includes("UsersRouter.cs"), `got: ${paths.join(", ")}`);
-    assert.ok(paths.includes("RolesRouter.cs"));
-    assert.ok(paths.includes("OrdersRouter.cs"));
+    assert.ok(paths.includes("usersRouter.cs"), `got: ${paths.join(", ")}`);
+    assert.ok(paths.includes("rolesRouter.cs"));
+    assert.ok(paths.includes("ordersRouter.cs"));
     assert.ok(!paths.includes("OrderItemsRouter.cs"));
     assert.ok(!paths.includes("InternalSinksRouter.cs"));
-    assert.ok(paths.includes("../custom/GetHealthRoute.cs"));
-    assert.ok(paths.includes("../custom/GetReportRoute.cs"));
-    assert.ok(paths.includes("RoleNameEnrichment.cs"));
+    assert.ok(paths.includes("../custom/getHealthRoute.cs"));
+    assert.ok(paths.includes("../custom/getReportRoute.cs"));
+    assert.ok(paths.includes("roleNameEnrichment.cs"));
 
-    const users = textOf(entries, "UsersRouter.cs");
+    const users = textOf(entries, "usersRouter.cs");
     assert.match(users, /namespace Routes\.Views;/);
     assert.match(users, /public interface IUsersRouter \{ \}/);
     assert.match(users, /public class UsersRouter : IUsersRouter \{ \}/);
 
-    const roles = textOf(entries, "RolesRouter.cs");
+    const roles = textOf(entries, "rolesRouter.cs");
     assert.match(roles, /public class RolesRouter : IRolesRouter/);
 
-    const health = textOf(entries, "../custom/GetHealthRoute.cs");
+    const health = textOf(entries, "../custom/getHealthRoute.cs");
     assert.match(health, /namespace Routes\.Custom;/);
     assert.match(health, /public class GetHealthRoute : IGetHealthRoute/);
 
-    const enrich = textOf(entries, "RoleNameEnrichment.cs");
+    const enrich = textOf(entries, "roleNameEnrichment.cs");
     assert.match(enrich, /namespace Routes\.Enrichment;/);
     assert.match(enrich, /public static class RoleNameEnrichment/);
     assert.match(enrich, /EnrichItemsWithRoleNameAsync/);
@@ -123,7 +123,7 @@ routes: []
       }),
       settings: { comments: "description" },
     });
-    const users = textOf(entries, "UsersRouter.cs");
+    const users = textOf(entries, "usersRouter.cs");
     assert.match(users, /Datasource type: standard/);
     assert.match(users, /Target: StandardCrud/);
   });
@@ -141,7 +141,7 @@ routes: []
       }),
       settings: {},
     });
-    const users = textOf(entries, "UsersRouter.cs");
+    const users = textOf(entries, "usersRouter.cs");
     assert.match(users, /\/\*\* Route UsersRouter\. \*\//);
   });
 
@@ -158,7 +158,7 @@ routes: []
       }),
       settings: { comments: "none" },
     });
-    const users = textOf(entries, "UsersRouter.cs");
+    const users = textOf(entries, "usersRouter.cs");
     assert.ok(!users.includes("/**"));
   });
 });

@@ -1,11 +1,6 @@
-import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import {
-  createImportGenerator,
-  type CsharpImportGenerator,
-} from "./import-generator.ts";
 import {
   DeterministicParser,
   ROUTES_YAML,
@@ -14,77 +9,12 @@ import {
   type ViewType,
   type IDeterministic,
 } from "./specification-parser.ts";
+import { Emit } from "./emit.ts";
 import {
   customStubTmpl,
   nameEnrichmentTmpl,
   routerTmpl,
 } from "./resources/routes.ts";
-
-const docTokens = (settings: Record<string, string>) => {
-  const comments = settings["comments"];
-  return {
-    simpleDoc: comments !== "none" && comments !== "description",
-    descriptionDoc: comments === "description",
-  };
-};
-
-type EmitOptions = {
-  imports: CsharpImportGenerator;
-  simpleDoc: boolean;
-  descriptionDoc: boolean;
-};
-
-const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  imports: createImportGenerator(".", settings),
-  ...docTokens(settings),
-});
-
-const renderRouter = (
-  candidate: RouteCandidate,
-  opts: EmitOptions,
-): GenerateEntry => {
-  const className = opts.imports.routeModule(candidate.name);
-  return content(
-    opts.imports.route(candidate.name),
-    fill(routerTmpl, {
-      simpleDoc: opts.simpleDoc,
-      descriptionDoc: opts.descriptionDoc,
-      className,
-      interfaceName: `I${className}`,
-    }),
-  );
-};
-
-const renderCustom = (
-  entry: CustomRouteEntry,
-  opts: EmitOptions,
-): GenerateEntry => {
-  const className = pascalCase(`${entry.name}_route`);
-  return content(
-    opts.imports.routeCustom(entry.name),
-    fill(customStubTmpl, {
-      interfaceName: `I${className}`,
-      className,
-    }),
-  );
-};
-
-const renderEnrichment = (
-  targetTable: string,
-  opts: EmitOptions,
-): GenerateEntry => {
-  const targetPascal = pascalCase(targetTable);
-  return content(
-    opts.imports.enrichment(targetTable),
-    fill(nameEnrichmentTmpl, {
-      className: pascalCase(`${targetTable}_name_enrichment`),
-      targetPascal,
-      targetTable,
-      fkProp: `${targetPascal}Id`,
-      nameProp: `${targetPascal}Name`,
-    }),
-  );
-};
 
 /** Unique enrichment targets from shaped views (auto-enrich), deduped by table. */
 const enrichmentTargets = (
@@ -105,27 +35,64 @@ const enrichmentTargets = (
   return out;
 };
 
-const generateFrom = (
-  deterministic: IDeterministic,
-  settings: Record<string, string>,
-): GenerateEntry[] => {
-  const opts = emitOptions(settings);
-  const { candidates, customs } = deterministic.routes;
-  const survivorNames = new Set(candidates.map((c) => c.name));
-  const targets = enrichmentTargets(deterministic.viewTypes, survivorNames);
-  return [
-    ...candidates.map((c) => renderRouter(c, opts)),
-    ...customs.map((c) => renderCustom(c, opts)),
-    ...targets.map((t) => renderEnrichment(t, opts)),
-  ];
-};
+class Generator extends Emit {
+  from(deterministic: IDeterministic): GenerateEntry[] {
+    const { candidates, customs } = deterministic.routes;
+    const survivorNames = new Set(candidates.map((c) => c.name));
+    const targets = enrichmentTargets(deterministic.viewTypes, survivorNames);
+    return [
+      ...candidates.map((c) => this.router(c)),
+      ...customs.map((c) => this.custom(c)),
+      ...targets.map((t) => this.enrichment(t)),
+    ];
+  }
+
+  private router(candidate: RouteCandidate): GenerateEntry {
+    const className = this.casing.convertTypes(
+      this.imports.routeModule(candidate.name),
+    );
+    return content(
+      this.imports.route(candidate.name),
+      fill(routerTmpl, {
+        simpleDoc: this.settings.simpleDoc,
+        descriptionDoc: this.settings.descriptionDoc,
+        className,
+        interfaceName: `I${className}`,
+      }),
+    );
+  }
+
+  private custom(entry: CustomRouteEntry): GenerateEntry {
+    const className = this.casing.convertTypes(`${entry.name}_route`);
+    return content(
+      this.imports.routeCustom(entry.name),
+      fill(customStubTmpl, {
+        interfaceName: `I${className}`,
+        className,
+      }),
+    );
+  }
+
+  private enrichment(targetTable: string): GenerateEntry {
+    const targetPascal = this.casing.convertTypes(targetTable);
+    return content(
+      this.imports.enrichment(targetTable),
+      fill(nameEnrichmentTmpl, {
+        className: this.casing.convertTypes(`${targetTable}_name_enrichment`),
+        targetPascal,
+        targetTable,
+        fkProp: this.casing.convertFields(`${targetTable}_id`),
+        nameProp: this.casing.convertFields(`${targetTable}_name`),
+      }),
+    );
+  }
+}
 
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   await ctx.reader.read(ROUTES_YAML);
-  return generateFrom(
+  return new Generator(ctx.settings).from(
     await DeterministicParser(ctx.reader).parse(ctx.settings),
-    ctx.settings,
   );
 };
