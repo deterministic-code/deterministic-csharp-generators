@@ -2,7 +2,10 @@ import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
+import {
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import {
   DeterministicParser,
   VIEW_TYPES_YAML,
@@ -16,7 +19,7 @@ import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/view-type-validators-tests.ts";
 
 type EmitOptions = {
-  naming: ArtifactPaths;
+  imports: CsharpImportGenerator;
   schemaVersion: string;
   tables: Map<string, DatasourceType>;
   views: Map<string, ViewType>;
@@ -35,7 +38,7 @@ type CaseTok = {
 };
 
 const emitBase = (settings: Record<string, string>) => ({
-  naming: viewPaths(settings),
+  imports: createImportGenerator(".", settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
@@ -92,11 +95,11 @@ const samplesForNative = (
   }
 };
 
-const dsType = (name: string, naming: ArtifactPaths): string =>
-  `Backend.Types.Datasource.${naming.className(name)}`;
+const dsType = (name: string, imports: CsharpImportGenerator): string =>
+  imports.datasourceQual(name);
 
-const viewType = (name: string, naming: ArtifactPaths): string =>
-  `Backend.Types.View.${naming.className(name)}`;
+const viewType = (name: string, imports: CsharpImportGenerator): string =>
+  imports.viewQual(name);
 
 const wrapValue = (
   expr: string,
@@ -112,13 +115,13 @@ const objectLiteral = (
 
 const renderDs = (name: string, opts: EmitOptions): string => {
   const table = opts.tables.get(name);
-  const cls = dsType(name, opts.naming);
+  const cls = dsType(name, opts.imports);
   if (table === undefined) return `new ${cls}()`;
   return objectLiteral(
     cls,
     table.fields.map((f) => {
       const { sample } = samplesForNative(convertSpecType(f.type), f.type);
-      return { ident: opts.naming.fieldName(f.name), expr: sample };
+      return { ident: pascalCase(f.name), expr: sample };
     }),
   );
 };
@@ -128,7 +131,7 @@ const viewFieldTok = (
   opts: EmitOptions,
   visited: Set<string>,
 ): FieldTok => {
-  const ident = opts.naming.fieldName(field.name);
+  const ident = pascalCase(field.name);
   let sample: string;
   let elemType: string;
   if (field.kind === "primitive") {
@@ -137,10 +140,10 @@ const viewFieldTok = (
     elemType = native;
   } else if (field.kind === "datasource") {
     sample = renderDs(field.base, opts);
-    elemType = dsType(field.base, opts.naming);
+    elemType = dsType(field.base, opts.imports);
   } else {
     sample = viewFixture(field.base, opts, visited);
-    elemType = viewType(field.base, opts.naming);
+    elemType = viewType(field.base, opts.imports);
   }
   return {
     ident,
@@ -160,7 +163,7 @@ const viewFixture = (
   opts: EmitOptions,
   visited: Set<string>,
 ): string => {
-  const cls = viewType(name, opts.naming);
+  const cls = viewType(name, opts.imports);
   if (visited.has(name)) return `new ${cls}()`;
   const view = opts.views.get(name);
   if (view === undefined) return `new ${cls}()`;
@@ -180,7 +183,7 @@ const viewFixture = (
 
 const shapedCases = (view: ShapedView, opts: EmitOptions): CaseTok[] => {
   const fields = shapedToks(view, opts, new Set([view.name]));
-  const cls = viewType(view.name, opts.naming);
+  const cls = viewType(view.name, opts.imports);
   const cases: CaseTok[] = [
     {
       ident: "ParsesAValidPayload",
@@ -210,7 +213,7 @@ const shapedCases = (view: ShapedView, opts: EmitOptions): CaseTok[] => {
     }
     const native = convertSpecType(field.base);
     if (native !== "string") continue;
-    const ident = opts.naming.fieldName(field.name);
+    const ident = pascalCase(field.name);
     cases.push({
       ident: `RejectsNullFor${pascalCase(ident)}`,
       fixture: objectLiteral(
@@ -231,7 +234,7 @@ const unionCases = (
   opts: EmitOptions,
 ): CaseTok[] =>
   view.members.map((name) => ({
-    ident: `Accepts${opts.naming.className(name)}Member`,
+    ident: `Accepts${pascalCase(name)}Member`,
     fixture: viewFixture(name, opts, new Set([view.name])),
     assertion: "True",
   }));
@@ -240,11 +243,11 @@ const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
   const cases =
     view.kind === "union" ? unionCases(view, opts) : shapedCases(view, opts);
   return content(
-    opts.naming.filePath(view.name).replace(/\.cs$/, "ValidatorTests.cs"),
+    opts.imports.test(opts.imports.viewValidator(view.name), view.name),
     fill(typeTestTmpl, {
       schemaVersion: opts.schemaVersion,
-      className: opts.naming.className(view.name),
-      validatorClass: `${opts.naming.className(view.name)}Validator`,
+      className: pascalCase(view.name),
+      validatorClass: `${pascalCase(view.name)}Validator`,
       isUnion: view.kind === "union",
       needsList: cases.some((c) => c.fixture.includes("new List<")),
       cases,

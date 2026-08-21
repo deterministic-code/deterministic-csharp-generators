@@ -1,7 +1,11 @@
+import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
+import {
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import {
   DeterministicParser,
   VIEW_TYPES_YAML,
@@ -13,7 +17,7 @@ import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/view-types-tests.ts";
 
 type EmitOptions = {
-  naming: ArtifactPaths;
+  imports: CsharpImportGenerator;
   schemaVersion: string;
 };
 
@@ -25,7 +29,7 @@ type FieldTok = {
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: viewPaths(settings),
+  imports: createImportGenerator(".", settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
@@ -70,10 +74,10 @@ const samplesForNative = (
 const listElemType = (field: ViewField, opts: EmitOptions): string =>
   field.kind === "primitive"
     ? convertSpecType(field.base)
-    : opts.naming.className(field.base);
+    : pascalCase(field.base);
 
 const fieldTokens = (field: ViewField, opts: EmitOptions): FieldTok => {
-  const ident = opts.naming.fieldName(field.name);
+  const ident = pascalCase(field.name);
   if (field.kind === "primitive") {
     const pair = samplesForNative(
       convertSpecType(field.base),
@@ -91,7 +95,7 @@ const fieldTokens = (field: ViewField, opts: EmitOptions): FieldTok => {
       nullable: field.isNullable,
     };
   }
-  const cls = opts.naming.className(field.base);
+  const cls = pascalCase(field.base);
   const obj = `new ${cls}()`;
   return {
     ident,
@@ -101,8 +105,8 @@ const fieldTokens = (field: ViewField, opts: EmitOptions): FieldTok => {
   };
 };
 
-const testPath = (entity: string, naming: ArtifactPaths): string =>
-  naming.filePath(entity).replace(/\.cs$/, "Tests.cs");
+const testPath = (entity: string, imports: CsharpImportGenerator): string =>
+  imports.test(imports.view(entity), entity);
 
 const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
   const fields =
@@ -110,10 +114,10 @@ const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
       ? view.fields.map((f) => fieldTokens(f, opts))
       : [];
   return content(
-    testPath(view.name, opts.naming),
+    testPath(view.name, opts.imports),
     fill(typeTestTmpl, {
       schemaVersion: opts.schemaVersion,
-      className: opts.naming.className(view.name),
+      className: pascalCase(view.name),
       isShaped: view.kind === "shaped",
       isUnion: view.kind === "union",
       needsList: view.kind === "shaped" && view.fields.some((f) => f.isArray),
@@ -121,8 +125,8 @@ const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
       members:
         view.kind === "union"
           ? view.members.map((name) => ({
-              ident: opts.naming.fieldName(name),
-              memberClass: opts.naming.className(name),
+              ident: pascalCase(name),
+              memberClass: pascalCase(name),
             }))
           : [],
     }),

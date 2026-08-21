@@ -1,10 +1,11 @@
+import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import {
-  servicePaths,
-  type ServicePaths,
-} from "./common/paths.ts";
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import {
   DeterministicParser,
   SERVICES_YAML,
@@ -23,23 +24,26 @@ const docTokens = (settings: Record<string, string>) => {
 };
 
 type EmitOptions = {
-  naming: ServicePaths;
+  imports: CsharpImportGenerator;
   simpleDoc: boolean;
   descriptionDoc: boolean;
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: servicePaths(settings),
+  imports: createImportGenerator(".", settings),
   ...docTokens(settings),
 });
+
+const serviceClassName = (entity: string): string =>
+  pascalCase(`${entity}_service`);
 
 const renderGeneric = (
   candidate: ServiceCandidate,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const className = opts.naming.serviceClassName(candidate.name);
+  const className = serviceClassName(candidate.name);
   return content(
-    opts.naming.filePath(candidate.name),
+    opts.imports.service(candidate.name),
     fill(genericTmpl, {
       simpleDoc: opts.simpleDoc,
       descriptionDoc: opts.descriptionDoc,
@@ -56,7 +60,7 @@ const renderCustom = (
   const className = entry.name;
   const interfaceName = `I${className}`;
   return content(
-    opts.naming.customStubPath(entry.name),
+    opts.imports.serviceCustom(entry.name, entry.module),
     fill(customStubTmpl, {
       simpleDoc: opts.simpleDoc,
       descriptionDoc: opts.descriptionDoc,
@@ -82,10 +86,9 @@ export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   await ctx.reader.read(SERVICES_YAML);
-  const naming = servicePaths(ctx.settings);
   return generateFrom(
     await DeterministicParser(ctx.reader).parse(ctx.settings, {
-      serviceClassName: naming.serviceClassName,
+      serviceClassName,
     }),
     ctx.settings,
   );

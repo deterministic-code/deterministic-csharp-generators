@@ -1,7 +1,11 @@
+import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
+import {
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
@@ -12,12 +16,12 @@ import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/datasource-types-tests.ts";
 
 type EmitOptions = {
-  naming: ArtifactPaths;
+  imports: CsharpImportGenerator;
   schemaVersion: string;
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: datasourcePaths(settings),
+  imports: createImportGenerator(".", settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
@@ -89,7 +93,7 @@ const fieldTokens = (
   field: { name: string; type: string; isNullable: boolean },
   opts: EmitOptions,
 ) => {
-  const ident = opts.naming.fieldName(field.name);
+  const ident = pascalCase(field.name);
   const native = convertSpecType(field.type);
   const { sample, next } = samplesForNative(native, field.type);
   return {
@@ -100,8 +104,8 @@ const fieldTokens = (
   };
 };
 
-const testPath = (entity: string, naming: ArtifactPaths): string =>
-  naming.filePath(entity).replace(/\.cs$/, "Tests.cs");
+const testPath = (entity: string, imports: CsharpImportGenerator): string =>
+  imports.test(imports.datasource(entity), entity);
 
 const renderTests = (
   table: DatasourceType,
@@ -109,10 +113,10 @@ const renderTests = (
 ): GenerateEntry => {
   const fields = table.fields.map((f) => fieldTokens(f, opts));
   return content(
-    testPath(table.name, opts.naming),
+    testPath(table.name, opts.imports),
     fill(typeTestTmpl, {
       schemaVersion: opts.schemaVersion,
-      className: opts.naming.className(table.name),
+      className: pascalCase(table.name),
       fields,
     }),
   );

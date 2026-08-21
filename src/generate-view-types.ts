@@ -1,7 +1,11 @@
+import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
+import {
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import { emitViewFields, inlinesParent } from "./common/view-shape.ts";
 import {
   DeterministicParser,
@@ -22,14 +26,14 @@ const docTokens = (settings: Record<string, string>) => {
 };
 
 type EmitOptions = {
-  naming: ArtifactPaths;
+  imports: CsharpImportGenerator;
   schemaVersion: string;
   simpleDoc: boolean;
   descriptionDoc: boolean;
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: viewPaths(settings),
+  imports: createImportGenerator(".", settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   ...docTokens(settings),
 });
@@ -39,8 +43,8 @@ const csTypeFor = (field: ViewField, opts: EmitOptions): string => {
     field.kind === "primitive"
       ? convertSpecType(field.base)
       : field.kind === "datasource"
-        ? `Backend.Types.Datasource.${opts.naming.className(field.base)}`
-        : opts.naming.className(field.base);
+        ? opts.imports.datasourceQual(field.base)
+        : pascalCase(field.base);
   if (field.isArray) base = `List<${base}>`;
   return field.isNullable ? `${base}?` : base;
 };
@@ -50,12 +54,12 @@ const renderView = (
   expanded: ViewType | undefined,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const className = opts.naming.className(view.name);
+  const className = pascalCase(view.name);
   const isUnion = view.kind === "union";
   const fields = isUnion
     ? []
     : emitViewFields(view, expanded).map((f) => ({
-        ident: opts.naming.fieldName(f.name),
+        ident: pascalCase(f.name),
         csType: csTypeFor(f, opts),
       }));
   const hasExtends =
@@ -63,7 +67,7 @@ const renderView = (
   const needsList =
     !isUnion && view.kind === "shaped" && view.fields.some((f) => f.isArray);
   return content(
-    opts.naming.filePath(view.name),
+    opts.imports.view(view.name),
     fill(typeTmpl, {
       schemaVersion: opts.schemaVersion,
       needsList,
@@ -78,7 +82,7 @@ const renderView = (
       hasExtends,
       extendsType:
         hasExtends && view.kind === "shaped" && view.inherits !== null
-          ? `Backend.Types.Datasource.${opts.naming.className(view.inherits)}`
+          ? opts.imports.datasourceQual(view.inherits)
           : "",
       fields,
     }),

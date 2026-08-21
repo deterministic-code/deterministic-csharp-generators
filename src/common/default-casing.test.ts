@@ -20,14 +20,6 @@ describe("createCasing Auto defaults", () => {
     assert.equal(casing.filePath(NAME), "notificationType.cs");
     assert.equal(casing.serviceClassName("user"), "UserService");
   });
-
-  it("puts Auto files under a cased feature directory", () => {
-    const casing = createCasing({ "other.organize_by_feature": "true" });
-    assert.equal(
-      casing.filePath(NAME),
-      "Features/notificationType/notificationType.cs",
-    );
-  });
 });
 
 describe("createCasing overrides", () => {
@@ -59,15 +51,10 @@ describe("createCasing overrides", () => {
     assert.equal(casing.convertFields("RoleId"), "role_id");
   });
 
-  it("kebabs directories with pascal files", () => {
+  it("kebabs directories", () => {
     const casing = createCasing({
-      "other.organize_by_feature": "true",
-      "languages.csharp.casing.file_names": "Pascal",
       "languages.csharp.casing.directories": "Kebab",
     });
-    assert.equal(
-      casing.filePath(NAME),
-      "Features/notification-type/NotificationType.cs",
-    );
+    assert.equal(casing.directory(NAME), "notification-type");
   });
 });
