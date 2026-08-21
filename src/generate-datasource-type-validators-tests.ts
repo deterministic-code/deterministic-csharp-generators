@@ -2,7 +2,10 @@ import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
+import {
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
@@ -14,7 +17,7 @@ import { convertSpecType } from "./base-type-converter.ts";
 import { typeTestTmpl } from "./resources/datasource-type-validators-tests.ts";
 
 type EmitOptions = {
-  naming: ArtifactPaths;
+  imports: CsharpImportGenerator;
   schemaVersion: string;
 };
 
@@ -32,7 +35,7 @@ type CaseTok = {
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: datasourcePaths(settings),
+  imports: createImportGenerator(".", settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
@@ -98,7 +101,7 @@ const fieldTok = (
     field.type,
   );
   return {
-    ident: opts.naming.fieldName(field.name),
+    ident: pascalCase(field.name),
     sampleExpr: sample,
     isNullable: field.isNullable,
     type: field.type,
@@ -168,9 +171,9 @@ const renderTests = (
   opts: EmitOptions,
 ): GenerateEntry => {
   const fields = table.fields.map((f) => fieldTok(f, opts));
-  const className = opts.naming.className(table.name);
+  const className = pascalCase(table.name);
   return content(
-    opts.naming.filePath(table.name).replace(/\.cs$/, "ValidatorTests.cs"),
+    opts.imports.test(opts.imports.datasourceValidator(table.name), table.name),
     fill(typeTestTmpl, {
       schemaVersion: opts.schemaVersion,
       className,

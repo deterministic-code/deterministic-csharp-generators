@@ -1,10 +1,11 @@
+import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
 import {
-  routePaths,
-  type RoutePaths,
-} from "./common/paths.ts";
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import {
   DeterministicParser,
   ROUTES_YAML,
@@ -28,13 +29,13 @@ const docTokens = (settings: Record<string, string>) => {
 };
 
 type EmitOptions = {
-  naming: RoutePaths;
+  imports: CsharpImportGenerator;
   simpleDoc: boolean;
   descriptionDoc: boolean;
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: routePaths(settings),
+  imports: createImportGenerator(".", settings),
   ...docTokens(settings),
 });
 
@@ -42,9 +43,9 @@ const renderRouter = (
   candidate: RouteCandidate,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const className = opts.naming.routerClassName(candidate.name);
+  const className = opts.imports.routeModule(candidate.name);
   return content(
-    opts.naming.filePath(candidate.name),
+    opts.imports.route(candidate.name),
     fill(routerTmpl, {
       simpleDoc: opts.simpleDoc,
       descriptionDoc: opts.descriptionDoc,
@@ -58,9 +59,9 @@ const renderCustom = (
   entry: CustomRouteEntry,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const className = opts.naming.customRouteClassName(entry.name);
+  const className = pascalCase(`${entry.name}_route`);
   return content(
-    opts.naming.customStubPath(entry.name),
+    opts.imports.routeCustom(entry.name),
     fill(customStubTmpl, {
       interfaceName: `I${className}`,
       className,
@@ -72,11 +73,11 @@ const renderEnrichment = (
   targetTable: string,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const targetPascal = opts.naming.className(targetTable);
+  const targetPascal = pascalCase(targetTable);
   return content(
-    opts.naming.enrichmentFilePath(targetTable),
+    opts.imports.enrichment(targetTable),
     fill(nameEnrichmentTmpl, {
-      className: opts.naming.enrichmentClassName(targetTable),
+      className: pascalCase(`${targetTable}_name_enrichment`),
       targetPascal,
       targetTable,
       fkProp: `${targetPascal}Id`,

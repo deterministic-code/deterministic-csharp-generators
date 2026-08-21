@@ -1,7 +1,11 @@
+import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { datasourcePaths, type ArtifactPaths } from "./common/paths.ts";
+import {
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import {
   DeterministicParser,
   DATASOURCE_TYPES_YAML,
@@ -14,7 +18,7 @@ import { isFiniteInt, isFiniteNumber } from "@deterministic-code/generators-comm
 import { typeTmpl } from "./resources/datasource-type-validators.ts";
 
 type EmitOptions = {
-  naming: ArtifactPaths;
+  imports: CsharpImportGenerator;
   schemaVersion: string;
   namespace: string;
   typesNamespace: string;
@@ -35,7 +39,7 @@ const UUID_PATTERN =
   "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$";
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: datasourcePaths(settings),
+  imports: createImportGenerator(".", settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
   namespace: "Backend.Validators.Datasource",
   typesNamespace: "Backend.Types.Datasource",
@@ -134,7 +138,7 @@ const tightenedRulesFor = (field: FieldShape): string[] => {
 };
 
 const ruleLine = (field: FieldShape, opts: EmitOptions): string => {
-  const prop = opts.naming.fieldName(field.name);
+  const prop = pascalCase(field.name);
   const tightened = tightenedRulesFor(field);
   const parts: string[] = [];
   if (!field.isNullable) parts.push("NotNull()");
@@ -151,7 +155,7 @@ const ruleLine = (field: FieldShape, opts: EmitOptions): string => {
 };
 
 const standardRuleLine = (name: string, opts: EmitOptions, idType: string): string => {
-  const prop = opts.naming.fieldName(name);
+  const prop = pascalCase(name);
   if (name === "id") {
     const bound = numericLiteralForNative(
       convertSpecType(idType),
@@ -165,21 +169,21 @@ const standardRuleLine = (name: string, opts: EmitOptions, idType: string): stri
   return `        RuleFor(x => x.${prop})\n            .NotNull();`;
 };
 
-const validatorPath = (entity: string, naming: ArtifactPaths): string =>
-  `Datasource${naming.filePath(entity).replace(/\.cs$/, "")}Validator.cs`;
+const validatorPath = (entity: string, imports: CsharpImportGenerator): string =>
+  imports.datasourceValidator(entity);
 
 const renderValidator = (
   table: ExpandedDatasourceType,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const className = opts.naming.className(table.name);
+  const className = pascalCase(table.name);
   const rules = table.fields.map((field: DatasourceField) =>
     STANDARD_COLUMN_NAMES.has(field.name)
       ? standardRuleLine(field.name, opts, field.type)
       : ruleLine(field, opts),
   );
   return content(
-    validatorPath(table.name, opts.naming),
+    validatorPath(table.name, opts.imports),
     fill(typeTmpl, {
       schemaVersion: opts.schemaVersion,
       namespace: opts.namespace,

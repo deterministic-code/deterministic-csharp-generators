@@ -2,7 +2,10 @@ import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { viewPaths, type ArtifactPaths } from "./common/paths.ts";
+import {
+  createImportGenerator,
+  type CsharpImportGenerator,
+} from "./import-generator.ts";
 import { emitViewFields, inlinesParent } from "./common/view-shape.ts";
 import {
   DeterministicParser,
@@ -14,55 +17,51 @@ import {
 import { typeTmpl } from "./resources/view-type-validators.ts";
 
 type EmitOptions = {
-  naming: ArtifactPaths;
+  imports: CsharpImportGenerator;
   schemaVersion: string;
 };
 
 const emitOptions = (settings: Record<string, string>): EmitOptions => ({
-  naming: viewPaths(settings),
+  imports: createImportGenerator(".", settings),
   schemaVersion: settings["codegen.schema_version"] ?? "1.0",
 });
 
-const viewValidator = (name: string, naming: ArtifactPaths): string =>
-  `${naming.className(name)}Validator`;
+const viewValidator = (name: string): string => `${pascalCase(name)}Validator`;
 
-const datasourceValidator = (name: string, naming: ArtifactPaths): string =>
-  `Datasource${naming.className(name)}Validator`;
+const datasourceValidator = (name: string): string =>
+  `Datasource${pascalCase(name)}Validator`;
 
-const nestedValidator = (field: ViewField, naming: ArtifactPaths): string =>
+const nestedValidator = (field: ViewField): string =>
   field.kind === "datasource"
-    ? datasourceValidator(field.base, naming)
-    : viewValidator(field.base, naming);
+    ? datasourceValidator(field.base)
+    : viewValidator(field.base);
 
-const ruleLine = (field: ViewField, opts: EmitOptions): string => {
-  const prop = opts.naming.fieldName(field.name);
+const ruleLine = (field: ViewField): string => {
+  const prop = pascalCase(field.name);
   const notNull = field.isNullable ? "" : "\n            .NotNull()";
   if (field.isArray) {
     const each =
       field.kind === "primitive"
         ? ""
-        : `\n            .ForEach(x => x.SetValidator(new ${nestedValidator(field, opts.naming)}()))`;
+        : `\n            .ForEach(x => x.SetValidator(new ${nestedValidator(field)}()))`;
     return `        RuleFor(x => x.${prop})${notNull}${each};`;
   }
   if (field.kind === "primitive") {
     return `        RuleFor(x => x.${prop})${notNull};`;
   }
-  return `        RuleFor(x => x.${prop})${notNull}\n            .SetValidator(new ${nestedValidator(field, opts.naming)}());`;
+  return `        RuleFor(x => x.${prop})${notNull}\n            .SetValidator(new ${nestedValidator(field)}());`;
 };
-
-const validatorPath = (entity: string, naming: ArtifactPaths): string =>
-  naming.filePath(entity).replace(/\.cs$/, "Validator.cs");
 
 const renderView = (
   view: ViewType,
   expanded: ViewType | undefined,
   opts: EmitOptions,
 ): GenerateEntry => {
-  const className = opts.naming.className(view.name);
-  const validatorClass = viewValidator(view.name, opts.naming);
+  const className = pascalCase(view.name);
+  const validatorClass = viewValidator(view.name);
   if (view.kind === "union") {
     return content(
-      validatorPath(view.name, opts.naming),
+      opts.imports.viewValidator(view.name),
       fill(typeTmpl, {
         schemaVersion: opts.schemaVersion,
         isUnion: true,
@@ -70,10 +69,10 @@ const renderView = (
         className,
         validatorClass,
         branches: view.members.map((m) => {
-          const memberCls = opts.naming.className(m);
+          const memberCls = pascalCase(m);
           const alias = `as${pascalCase(m)}`;
           return {
-            line: `if (obj is Backend.Types.View.${memberCls} ${alias}) { new ${viewValidator(m, opts.naming)}().ValidateAndThrow(${alias}); return; }`,
+            line: `if (obj is ${opts.imports.viewQual(m)} ${alias}) { new ${viewValidator(m)}().ValidateAndThrow(${alias}); return; }`,
           };
         }),
         rules: [],
@@ -82,14 +81,14 @@ const renderView = (
   }
   const include =
     view.inherits && !inlinesParent(view)
-      ? `        Include(new ${datasourceValidator(view.inherits, opts.naming)}());`
+      ? `        Include(new ${datasourceValidator(view.inherits)}());`
       : null;
   const rules = [
     include,
-    ...emitViewFields(view, expanded).map((f) => ruleLine(f, opts)),
+    ...emitViewFields(view, expanded).map((f) => ruleLine(f)),
   ].filter((x): x is string => x !== null && x !== "");
   return content(
-    validatorPath(view.name, opts.naming),
+    opts.imports.viewValidator(view.name),
     fill(typeTmpl, {
       schemaVersion: opts.schemaVersion,
       isUnion: false,

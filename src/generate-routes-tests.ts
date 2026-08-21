@@ -1,7 +1,7 @@
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import { routePaths } from "./common/paths.ts";
+import { createImportGenerator } from "./import-generator.ts";
 import { DeterministicParser, ROUTES_YAML, type IDeterministic } from "./specification-parser.ts";
 import { genericTmpl } from "./resources/routes-tests.ts";
 
@@ -9,10 +9,10 @@ const generateFrom = (
   deterministic: IDeterministic,
   settings: Record<string, string>,
 ): GenerateEntry[] => {
-  const naming = routePaths(settings);
+  const imports = createImportGenerator(".", settings);
   return deterministic.routes.candidates.map((c) => {
-    const testClass = `${naming.routerClassName(c.name)}Tests`;
-    return content(`${testClass}.cs`, fill(genericTmpl, { testClass }));
+    const testClass = `${imports.routeModule(c.name)}Tests`;
+    return content(imports.routeTest(c.name), fill(genericTmpl, { testClass }));
   });
 };
 
