@@ -1,11 +1,6 @@
-import { pascalCase } from "change-case";
 import { fill } from "@deterministic-code/generators-common/fill";
 import type { GenerateContext } from "@deterministic-code/generators-common/generate-context";
 import { content, type GenerateEntry } from "@deterministic-code/generators-common/generate-entry";
-import {
-  createImportGenerator,
-  type CsharpImportGenerator,
-} from "./import-generator.ts";
 import {
   DeterministicParser,
   VIEW_TYPES_YAML,
@@ -16,14 +11,8 @@ import {
   type IDeterministic,
 } from "./specification-parser.ts";
 import { convertSpecType } from "./base-type-converter.ts";
+import { Emit } from "./emit.ts";
 import { typeTestTmpl } from "./resources/view-type-validators-tests.ts";
-
-type EmitOptions = {
-  imports: CsharpImportGenerator;
-  schemaVersion: string;
-  tables: Map<string, DatasourceType>;
-  views: Map<string, ViewType>;
-};
 
 type FieldTok = {
   ident: string;
@@ -36,11 +25,6 @@ type CaseTok = {
   fixture: string;
   assertion: string;
 };
-
-const emitBase = (settings: Record<string, string>) => ({
-  imports: createImportGenerator(".", settings),
-  schemaVersion: settings["codegen.schema_version"] ?? "1.0",
-});
 
 const samplesForNative = (
   native: string,
@@ -95,12 +79,6 @@ const samplesForNative = (
   }
 };
 
-const dsType = (name: string, imports: CsharpImportGenerator): string =>
-  imports.datasourceQual(name);
-
-const viewType = (name: string, imports: CsharpImportGenerator): string =>
-  imports.viewQual(name);
-
 const wrapValue = (
   expr: string,
   field: { isArray: boolean },
@@ -113,169 +91,174 @@ const objectLiteral = (
 ): string =>
   `new ${cls} { ${fields.map((f) => `${f.ident} = ${f.expr}`).join(", ")} }`;
 
-const renderDs = (name: string, opts: EmitOptions): string => {
-  const table = opts.tables.get(name);
-  const cls = dsType(name, opts.imports);
-  if (table === undefined) return `new ${cls}()`;
-  return objectLiteral(
-    cls,
-    table.fields.map((f) => {
-      const { sample } = samplesForNative(convertSpecType(f.type), f.type);
-      return { ident: pascalCase(f.name), expr: sample };
-    }),
-  );
-};
+class Generator extends Emit {
+  private readonly tables: Map<string, DatasourceType>;
+  private readonly views: Map<string, ViewType>;
 
-const viewFieldTok = (
-  field: ViewField,
-  opts: EmitOptions,
-  visited: Set<string>,
-): FieldTok => {
-  const ident = pascalCase(field.name);
-  let sample: string;
-  let elemType: string;
-  if (field.kind === "primitive") {
-    const native = convertSpecType(field.base);
-    sample = samplesForNative(native, field.base).sample;
-    elemType = native;
-  } else if (field.kind === "datasource") {
-    sample = renderDs(field.base, opts);
-    elemType = dsType(field.base, opts.imports);
-  } else {
-    sample = viewFixture(field.base, opts, visited);
-    elemType = viewType(field.base, opts.imports);
-  }
-  return {
-    ident,
-    sampleExpr: wrapValue(sample, field, elemType),
-    nullable: field.isNullable,
-  };
-};
-
-const shapedToks = (
-  view: ShapedView,
-  opts: EmitOptions,
-  visited: Set<string>,
-): FieldTok[] => view.fields.map((f) => viewFieldTok(f, opts, visited));
-
-const viewFixture = (
-  name: string,
-  opts: EmitOptions,
-  visited: Set<string>,
-): string => {
-  const cls = viewType(name, opts.imports);
-  if (visited.has(name)) return `new ${cls}()`;
-  const view = opts.views.get(name);
-  if (view === undefined) return `new ${cls}()`;
-  const next = new Set(visited).add(name);
-  if (view.kind === "union") {
-    const member = view.members[0];
-    return member === undefined ? `new ${cls}()` : viewFixture(member, opts, next);
-  }
-  return objectLiteral(
-    cls,
-    shapedToks(view, opts, next).map((f) => ({
-      ident: f.ident,
-      expr: f.sampleExpr,
-    })),
-  );
-};
-
-const shapedCases = (view: ShapedView, opts: EmitOptions): CaseTok[] => {
-  const fields = shapedToks(view, opts, new Set([view.name]));
-  const cls = viewType(view.name, opts.imports);
-  const cases: CaseTok[] = [
-    {
-      ident: "ParsesAValidPayload",
-      fixture: objectLiteral(
-        cls,
-        fields.map((f) => ({ ident: f.ident, expr: f.sampleExpr })),
-      ),
-      assertion: "True",
-    },
-  ];
-  if (fields.some((f) => f.nullable)) {
-    cases.push({
-      ident: "AcceptsNullForNullableFields",
-      fixture: objectLiteral(
-        cls,
-        fields.map((f) => ({
-          ident: f.ident,
-          expr: f.nullable ? "null" : f.sampleExpr,
-        })),
-      ),
-      assertion: "True",
-    });
-  }
-  for (const field of view.fields) {
-    if (field.kind !== "primitive" || field.isNullable || field.isArray) {
-      continue;
-    }
-    const native = convertSpecType(field.base);
-    if (native !== "string") continue;
-    const ident = pascalCase(field.name);
-    cases.push({
-      ident: `RejectsNullFor${pascalCase(ident)}`,
-      fixture: objectLiteral(
-        cls,
-        fields.map((f) => ({
-          ident: f.ident,
-          expr: f.ident === ident ? "null" : f.sampleExpr,
-        })),
-      ),
-      assertion: "False",
-    });
-  }
-  return cases;
-};
-
-const unionCases = (
-  view: Extract<ViewType, { kind: "union" }>,
-  opts: EmitOptions,
-): CaseTok[] =>
-  view.members.map((name) => ({
-    ident: `Accepts${pascalCase(name)}Member`,
-    fixture: viewFixture(name, opts, new Set([view.name])),
-    assertion: "True",
-  }));
-
-const renderTests = (view: ViewType, opts: EmitOptions): GenerateEntry => {
-  const cases =
-    view.kind === "union" ? unionCases(view, opts) : shapedCases(view, opts);
-  return content(
-    opts.imports.test(opts.imports.viewValidator(view.name), view.name),
-    fill(typeTestTmpl, {
-      schemaVersion: opts.schemaVersion,
-      className: pascalCase(view.name),
-      validatorClass: `${pascalCase(view.name)}Validator`,
-      isUnion: view.kind === "union",
-      needsList: cases.some((c) => c.fixture.includes("new List<")),
-      cases,
-    }),
-  );
-};
-
-const generateFrom = (
-  deterministic: IDeterministic,
-  settings: Record<string, string>,
-): GenerateEntry[] => {
-  const views = deterministic.expandedViewTypes;
-  const opts: EmitOptions = {
-    ...emitBase(settings),
-    tables: new Map(
+  constructor(raw: Record<string, string>, deterministic: IDeterministic) {
+    super(raw);
+    this.tables = new Map(
       deterministic.expandedDatasourceTypes.map((t) => [t.name, t]),
-    ),
-    views: new Map(views.map((v) => [v.name, v])),
-  };
-  return views.map((view) => renderTests(view, opts));
-};
+    );
+    this.views = new Map(
+      deterministic.expandedViewTypes.map((v) => [v.name, v]),
+    );
+  }
+
+  from(): GenerateEntry[] {
+    return [...this.views.values()].map((view) => this.tests(view));
+  }
+
+  private dsType(name: string): string {
+    return this.imports.datasourceQual(name);
+  }
+
+  private viewType(name: string): string {
+    return this.imports.viewQual(name);
+  }
+
+  private renderDs(name: string): string {
+    const table = this.tables.get(name);
+    const cls = this.dsType(name);
+    if (table === undefined) return `new ${cls}()`;
+    return objectLiteral(
+      cls,
+      table.fields.map((f) => {
+        const { sample } = samplesForNative(convertSpecType(f.type), f.type);
+        return { ident: this.casing.convertFields(f.name), expr: sample };
+      }),
+    );
+  }
+
+  private viewFieldTok(
+    field: ViewField,
+    visited: Set<string>,
+  ): FieldTok {
+    const ident = this.casing.convertFields(field.name);
+    let sample: string;
+    let elemType: string;
+    if (field.kind === "primitive") {
+      const native = convertSpecType(field.base);
+      sample = samplesForNative(native, field.base).sample;
+      elemType = native;
+    } else if (field.kind === "datasource") {
+      sample = this.renderDs(field.base);
+      elemType = this.dsType(field.base);
+    } else {
+      sample = this.viewFixture(field.base, visited);
+      elemType = this.viewType(field.base);
+    }
+    return {
+      ident,
+      sampleExpr: wrapValue(sample, field, elemType),
+      nullable: field.isNullable,
+    };
+  }
+
+  private shapedToks(view: ShapedView, visited: Set<string>): FieldTok[] {
+    return view.fields.map((f) => this.viewFieldTok(f, visited));
+  }
+
+  private viewFixture(name: string, visited: Set<string>): string {
+    const cls = this.viewType(name);
+    if (visited.has(name)) return `new ${cls}()`;
+    const view = this.views.get(name);
+    if (view === undefined) return `new ${cls}()`;
+    const next = new Set(visited).add(name);
+    if (view.kind === "union") {
+      const member = view.members[0];
+      return member === undefined
+        ? `new ${cls}()`
+        : this.viewFixture(member, next);
+    }
+    return objectLiteral(
+      cls,
+      this.shapedToks(view, next).map((f) => ({
+        ident: f.ident,
+        expr: f.sampleExpr,
+      })),
+    );
+  }
+
+  private shapedCases(view: ShapedView): CaseTok[] {
+    const fields = this.shapedToks(view, new Set([view.name]));
+    const cls = this.viewType(view.name);
+    const cases: CaseTok[] = [
+      {
+        ident: "ParsesAValidPayload",
+        fixture: objectLiteral(
+          cls,
+          fields.map((f) => ({ ident: f.ident, expr: f.sampleExpr })),
+        ),
+        assertion: "True",
+      },
+    ];
+    if (fields.some((f) => f.nullable)) {
+      cases.push({
+        ident: "AcceptsNullForNullableFields",
+        fixture: objectLiteral(
+          cls,
+          fields.map((f) => ({
+            ident: f.ident,
+            expr: f.nullable ? "null" : f.sampleExpr,
+          })),
+        ),
+        assertion: "True",
+      });
+    }
+    for (const field of view.fields) {
+      if (field.kind !== "primitive" || field.isNullable || field.isArray) {
+        continue;
+      }
+      const native = convertSpecType(field.base);
+      if (native !== "string") continue;
+      const ident = this.casing.convertFields(field.name);
+      cases.push({
+        ident: this.casing.convertTypes(`rejects_null_for_${field.name}`),
+        fixture: objectLiteral(
+          cls,
+          fields.map((f) => ({
+            ident: f.ident,
+            expr: f.ident === ident ? "null" : f.sampleExpr,
+          })),
+        ),
+        assertion: "False",
+      });
+    }
+    return cases;
+  }
+
+  private unionCases(view: Extract<ViewType, { kind: "union" }>): CaseTok[] {
+    return view.members.map((name) => ({
+      ident: this.casing.convertTypes(`accepts_${name}_member`),
+      fixture: this.viewFixture(name, new Set([view.name])),
+      assertion: "True",
+    }));
+  }
+
+  private tests(view: ViewType): GenerateEntry {
+    const cases =
+      view.kind === "union" ? this.unionCases(view) : this.shapedCases(view);
+    return content(
+      this.imports.test(this.imports.viewValidator(view.name), view.name),
+      fill(typeTestTmpl, {
+        schemaVersion: this.settings.schemaVersion,
+        className: this.casing.convertTypes(view.name),
+        validatorClass: this.casing.convertTypes(`${view.name}_validator`),
+        isUnion: view.kind === "union",
+        needsList: cases.some((c) => c.fixture.includes("new List<")),
+        cases,
+      }),
+    );
+  }
+}
 
 export const generate = async (
   ctx: GenerateContext,
 ): Promise<GenerateEntry[]> => {
   await ctx.reader.read(VIEW_TYPES_YAML);
-  return generateFrom(
-    await DeterministicParser(ctx.reader).parse(ctx.settings),
+  const deterministic = await DeterministicParser(ctx.reader).parse(
     ctx.settings,
   );
+  return new Generator(ctx.settings, deterministic).from();
 };

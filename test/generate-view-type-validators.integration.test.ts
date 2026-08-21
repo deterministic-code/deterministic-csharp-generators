@@ -100,7 +100,7 @@ describe("generate view type validators", () => {
   });
 
   it("validates nested fields and union members", async () => {
-    const card = await bodyOf("CardPaymentValidator.cs");
+    const card = await bodyOf("cardPaymentValidator.cs");
     assert.match(
       card,
       /public class CardPaymentValidator : AbstractValidator<Backend\.Types\.View\.CardPayment>/,
@@ -114,11 +114,11 @@ describe("generate view type validators", () => {
       card,
       /RuleFor\(x => x\.Owner\)\n\s+\.SetValidator\(new UserValidator\(\)\)/,
     );
-    const payment = await bodyOf("PaymentValidator.cs");
+    const payment = await bodyOf("paymentValidator.cs");
     assert.match(payment, /public void ValidateAndThrow\(object obj\)/);
     assert.match(
       payment,
-      /if \(obj is Backend\.Types\.View\.CardPayment asCardPayment\)/,
+      /if \(obj is Backend\.Types\.View\.CardPayment AsCardPayment\)/,
     );
   });
 });
